@@ -869,6 +869,35 @@ function showScreen(id){
   el.offsetHeight; // force reflow
   el.classList.add('active');
   window.scrollTo({top:0,behavior:'smooth'});
+  // Re-init drag drop when crear screen becomes visible
+  if(id === 's-crear') setTimeout(initDragDrop, 100);
+}
+
+function initDragDrop(){
+  var uz = document.getElementById('upload-zone');
+  if(!uz) return;
+  // Remove old listeners by cloning
+  var newUz = uz.cloneNode(true);
+  uz.parentNode.replaceChild(newUz, uz);
+  uz = newUz;
+  // Re-attach the file input change listener
+  var inp = uz.querySelector('#file-input-crear') || document.getElementById('file-input-crear');
+  if(inp) inp.addEventListener('change', onFilesCrear);
+
+  function hi(){ uz.style.borderColor='var(--blue)'; uz.style.background='rgba(64,196,255,.15)'; }
+  function lo(){ uz.style.borderColor=''; uz.style.background=''; }
+  uz.addEventListener('dragenter', function(e){ e.preventDefault(); e.stopPropagation(); hi(); });
+  uz.addEventListener('dragover',  function(e){ e.preventDefault(); e.stopPropagation(); hi(); return false; });
+  uz.addEventListener('dragleave', function(e){ e.stopPropagation(); lo(); });
+  uz.addEventListener('drop', function(e){
+    e.preventDefault(); e.stopPropagation(); lo();
+    var files = Array.from(e.dataTransfer.files).filter(function(f){
+      var t=f.type.toLowerCase(), n=f.name.toLowerCase();
+      return t.startsWith('image/')||t==='application/pdf'||n.endsWith('.pdf')||n.endsWith('.heic')||n.endsWith('.heif');
+    });
+    if(files.length) accumulateFiles(files);
+    else toast('Formato no admitido. Usa JPG, PNG, WEBP, HEIC o PDF.');
+  });
 }
 
 function enterAlumno(){
@@ -1101,7 +1130,15 @@ async function crearStep3(){
     const cfgSnap=await firebase.getDoc(firebase.doc(db,'config','admin'));
     const obf=cfgSnap.data()?.apiKey||'';
     if(!obf){ errEl.textContent='El administrador no ha configurado la clave API todavia'; errEl.classList.add('show'); return; }
-    apiKey=atob(obf).split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^(73+i%17))).join('');
+    // Try new simple encoding first, fall back to old XOR for legacy keys
+    try {
+      apiKey = decodeURIComponent(escape(atob(obf)));
+    } catch(_) {
+      // Legacy XOR fallback for keys saved in older versions
+      apiKey = atob(obf).split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^(73+i%17))).join('');
+    }
+    // Validate it looks like an Anthropic key
+    if(!apiKey.startsWith('sk-ant-')) throw new Error('La clave API guardada no es valida. Ve al Configurador y guardala de nuevo.');
   } catch(e){ errEl.textContent='Error obteniendo configuracion: '+e.message; errEl.classList.add('show'); return; }
   setStep(3);
   await generarPreguntas(apiKey);
@@ -1590,7 +1627,8 @@ async function saveApiKey(){
 
   try {
     // Simple XOR obfuscation (not real encryption, but hides from casual view)
-    const obf = btoa(key.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^(73+i%17))).join(''));
+    // Simple base64 encoding — consistent across all versions
+    const obf = btoa(unescape(encodeURIComponent(key)));
     await firebase.updateDoc(firebase.doc(db,'config','admin'),{ apiKey: obf });
     document.getElementById('admin-apikey').value = '';
     document.getElementById('admin-apikey').placeholder = '*** clave guardada (editar para cambiar) ***';
@@ -1637,28 +1675,7 @@ function openModal(id){ document.getElementById(id).style.display='flex'; }
 function closeModal(id){ document.getElementById(id).style.display='none'; }
 function closeModalIfBg(e,id){ if(e.target.id===id) closeModal(id); }
 
-// ── Drag & drop setup ────────────────────────────────────────────
-(function setupDragDrop(){
-  function init(){
-    var uz=document.getElementById('upload-zone');
-    if(!uz){ setTimeout(init,500); return; }
-    function hi(){ uz.style.borderColor='var(--blue)'; uz.style.background='rgba(64,196,255,.15)'; }
-    function lo(){ uz.style.borderColor=''; uz.style.background=''; }
-    uz.addEventListener('dragenter',function(e){e.preventDefault();e.stopPropagation();hi();});
-    uz.addEventListener('dragover', function(e){e.preventDefault();e.stopPropagation();hi();});
-    uz.addEventListener('dragleave',function(e){e.stopPropagation();lo();});
-    uz.addEventListener('drop',function(e){
-      e.preventDefault();e.stopPropagation();lo();
-      var files=Array.from(e.dataTransfer.files).filter(function(f){
-        var t=f.type.toLowerCase(),n=f.name.toLowerCase();
-        return t.startsWith('image/')||t==='application/pdf'||n.endsWith('.pdf')||n.endsWith('.heic')||n.endsWith('.heif');
-      });
-      if(files.length) accumulateFiles(files);
-      else toast('Formato no admitido. Usa JPG, PNG, WEBP, HEIC o PDF.');
-    });
-  }
-  init();
-})();
+// Drag drop is initialized via initDragDrop() called from showScreen()
 document.addEventListener('dragover',function(e){e.preventDefault();});
 document.addEventListener('drop',function(e){e.preventDefault();});
 

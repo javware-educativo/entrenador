@@ -811,7 +811,7 @@ function pinErrorAnim(){
 }
 
 async function checkPin(){
-  if(!db){ toast('⚠️ Firebase no conectado'); pinBuffer=''; updateDots(); return; }
+  if(!db){ toast('Firebase no conectado'); pinBuffer=''; updateDots(); return; }
   const entered = pinBuffer;
   const enteredHash = await hashPin(entered);
 
@@ -832,12 +832,12 @@ async function checkPin(){
     });
 
     if(!found){
-      document.getElementById('pin-error').textContent = '❌ PIN incorrecto';
+      document.getElementById('pin-error').textContent = 'PIN incorrecto';
       pinErrorAnim();
       return;
     }
     if(!found.habilitado){
-      document.getElementById('pin-error').textContent = '🔒 Acceso deshabilitado. Habla con el administrador.';
+      document.getElementById('pin-error').textContent = 'Acceso deshabilitado. Habla con el administrador.';
       pinErrorAnim();
       return;
     }
@@ -845,7 +845,7 @@ async function checkPin(){
     enterAlumno();
   } catch(e){
     console.error(e);
-    document.getElementById('pin-error').textContent = '⚠️ Error de conexión: '+e.message;
+    document.getElementById('pin-error').textContent = 'Error de conexion: '+e.message;
     pinErrorAnim();
   }
 }
@@ -925,7 +925,7 @@ let chosenEmoji = '📖';
 let uploadedFiles = [];
 
 function irACrear(){
-  if(!currentUser?.puedeCrearTemas){ toast('⚠️ No tienes permiso para crear temas'); return; }
+  if(!currentUser?.puedeCrearTemas){ toast('Sin permiso para crear temas'); return; }
   document.getElementById('tema-nombre').value = '';
   chosenEmoji = '📖'; uploadedFiles = [];
   document.getElementById('uz-status-crear').textContent = '';
@@ -956,7 +956,7 @@ function backToStep1(){ setStep(1); }
 
 function crearStep2(){
   const nombre=document.getElementById('tema-nombre').value.trim();
-  if(!nombre){ toast('⚠️ Escribe el nombre del tema'); return; }
+  if(!nombre){ toast('Escribe el nombre del tema'); return; }
   setStep(2);
 }
 
@@ -980,9 +980,7 @@ function onFilesCrear(ev){
   // ── No valid files at all ────────────────────────────────────
   if(accepted.length===0){
     if(all.length>0){
-      errEl.textContent='❌ Ningún archivo válido. Formatos admitidos: JPG, PNG, WEBP, HEIC, PDF.
-'+
-        'Archivos rechazados: '+all.map(f=>f.name).join(', ');
+      errEl.textContent='ERROR: Ningún archivo válido. Formatos admitidos: JPG, PNG, WEBP, HEIC, PDF. Archivos rechazados: '+all.map(f=>f.name).join(', ');
       errEl.classList.add('show');
     }
     uploadedFiles=[]; return;
@@ -991,14 +989,14 @@ function onFilesCrear(ev){
   // ── Warn about rejected formats ──────────────────────────────
   const warnings = [];
   if(rejected.length>0){
-    warnings.push('⚠️ '+rejected.length+' archivo(s) ignorado(s) por formato no admitido: '+
+    warnings.push('AVISO: '+rejected.length+' archivo(s) ignorado(s) por formato no admitido: '+
       rejected.map(f=>f.name).join(', '));
   }
 
   // ── Enforce MAX_FILES limit ──────────────────────────────────
   uploadedFiles = accepted.slice(0, MAX_FILES);
   if(accepted.length > MAX_FILES){
-    warnings.push('⚠️ Límite: máximo '+MAX_FILES+' archivos por tema. '+
+    warnings.push('AVISO: Límite: máximo '+MAX_FILES+' archivos por tema. '+
       'Se ignoraron los últimos '+(accepted.length-MAX_FILES)+': '+
       accepted.slice(MAX_FILES).map(f=>f.name).join(', '));
   }
@@ -1013,7 +1011,7 @@ function onFilesCrear(ev){
 
   // ── Weight warnings ──────────────────────────────────────────
   if(parseFloat(totalMB)>200){
-    warnings.push('⚠️ El conjunto pesa '+totalMB+' MB. La compresión automática reducirá cada imagen '+
+    warnings.push('AVISO: El conjunto pesa '+totalMB+' MB. La compresión automática reducirá cada imagen '+
       'a unos 50-100 KB, pero el proceso puede tardar más de lo habitual.');
   }
 
@@ -1022,7 +1020,7 @@ function onFilesCrear(ev){
   if(imgs>0)  parts.push(imgs+' imagen'+(imgs>1?'es':''));
   if(heics>0) parts.push(heics+' HEIC');
   if(pdfs>0)  parts.push(pdfs+' PDF');
-  st.textContent = '✅ '+uploadedFiles.length+' archivo(s) listos: '+parts.join(' · ')+' · '+totalMB+' MB';
+  st.textContent = 'OK: '+uploadedFiles.length+' archivo(s) listos: '+parts.join(' · ')+' · '+totalMB+' MB';
 
   // ── Show warnings if any ─────────────────────────────────────
   if(warnings.length>0){
@@ -1035,14 +1033,14 @@ function onFilesCrear(ev){
 async function crearStep3(){
   const errEl=document.getElementById('crear-step2-err');
   errEl.classList.remove('show');
-  if(!uploadedFiles.length){ errEl.textContent='⚠️ Sube al menos una imagen de tus apuntes'; errEl.classList.add('show'); return; }
+  if(!uploadedFiles.length){ errEl.textContent='Sube al menos una imagen de tus apuntes'; errEl.classList.add('show'); return; }
   let apiKey='';
   try {
     const cfgSnap=await firebase.getDoc(firebase.doc(db,'config','admin'));
     const obf=cfgSnap.data()?.apiKey||'';
-    if(!obf){ errEl.textContent='⚠️ El administrador no ha configurado la clave API todavía'; errEl.classList.add('show'); return; }
+    if(!obf){ errEl.textContent='El administrador no ha configurado la clave API todavia'; errEl.classList.add('show'); return; }
     apiKey=atob(obf).split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^(73+i%17))).join('');
-  } catch(e){ errEl.textContent='❌ Error obteniendo configuración: '+e.message; errEl.classList.add('show'); return; }
+  } catch(e){ errEl.textContent='Error obteniendo configuracion: '+e.message; errEl.classList.add('show'); return; }
   setStep(3);
   await generarPreguntas(apiKey);
 }
@@ -1055,7 +1053,7 @@ async function generarPreguntas(apiKey){
     const imgs=[]; const skipped=[]; const files=uploadedFiles.slice(0,MAX_FILES); let totalKB=0;
     document.getElementById('gen-sub').textContent='Comprimiendo '+files.length+' archivo(s)…';
     for(let fi=0;fi<files.length;fi++){
-      document.getElementById('gen-sub').textContent='📄 Procesando '+(fi+1)+'/'+files.length+': '+files[fi].name;
+      document.getElementById('gen-sub').textContent=' Procesando '+(fi+1)+'/'+files.length+': '+files[fi].name;
       try {
         const pages=await fileToImages(files[fi]);
         for(const b64 of pages){
@@ -1072,7 +1070,7 @@ async function generarPreguntas(apiKey){
     if(skipped.length>0){
       const warnEl=document.getElementById('crear-step2-warn');
       if(warnEl){
-        warnEl.textContent='⚠️ '+skipped.length+' archivo(s) no procesado(s):\n'+skipped.join('\n');
+        warnEl.textContent='Archivos no procesados ('+skipped.length+'): '+skipped.join(' | ');
         warnEl.classList.add('show');
       }
     }
@@ -1122,13 +1120,13 @@ FORMATO: [{"categoria":"Nombre","pregunta":"...","opciones":["A","B","C","D"],"c
       let apiErrMsg='Error desconocido';
       try{
         const e=await resp.json(); const m=e.error?.message||'';
-        if(resp.status===401) apiErrMsg='🔑 Clave API incorrecta o expirada.\n→ Ve al Configurador y guarda una clave válida (sk-ant-api03-…).';
-        else if(resp.status===403) apiErrMsg='🔒 Sin permisos. La clave API no tiene acceso a este modelo.\n→ Comprueba que la clave es correcta en console.anthropic.com';
-        else if(resp.status===429) apiErrMsg='⏳ Demasiadas peticiones seguidas.\n→ Espera 1-2 minutos e inténtalo de nuevo.';
-        else if(resp.status===400 && m.includes('too large')) apiErrMsg='📦 Las imágenes pesan demasiado incluso comprimidas.\n→ Prueba con menos archivos (10 o menos) o imágenes más pequeñas.';
+        if(resp.status===401) apiErrMsg='Clave API incorrecta o expirada.\n→ Ve al Configurador y guarda una clave válida (sk-ant-api03-…).';
+        else if(resp.status===403) apiErrMsg='Sin permisos. La clave API no tiene acceso a este modelo.\n→ Comprueba que la clave es correcta en console.anthropic.com';
+        else if(resp.status===429) apiErrMsg='Demasiadas peticiones seguidas.\n→ Espera 1-2 minutos e inténtalo de nuevo.';
+        else if(resp.status===400 && m.includes('too large')) apiErrMsg='Las imagenes pesan demasiado incluso comprimidas.\n→ Prueba con menos archivos (10 o menos) o imágenes más pequeñas.';
         else if(resp.status===400) apiErrMsg='❌ Petición incorrecta: '+m;
-        else if(resp.status===500) apiErrMsg='🔧 Error interno del servidor de Anthropic.\n→ Inténtalo de nuevo en unos minutos.';
-        else if(resp.status===529) apiErrMsg='🌐 El servidor de la IA está saturado ahora mismo.\n→ Espera unos minutos e inténtalo de nuevo.';
+        else if(resp.status===500) apiErrMsg='Error interno del servidor de Anthropic.\n→ Inténtalo de nuevo en unos minutos.';
+        else if(resp.status===529) apiErrMsg='El servidor de la IA está saturado ahora mismo.\n→ Espera unos minutos e inténtalo de nuevo.';
         else apiErrMsg='Error '+resp.status+': '+m;
       }catch(_){ apiErrMsg='Error '+resp.status+' (respuesta no válida del servidor)'; }
       throw new Error(apiErrMsg);
@@ -1166,14 +1164,14 @@ FORMATO: [{"categoria":"Nombre","pregunta":"...","opciones":["A","B","C","D"],"c
       createdAt:firebase.serverTimestamp()
     });
     setGStep(4,'done');
-    document.getElementById('gen-title').textContent='¡TEMA CREADO! 🎉';
+    document.getElementById('gen-title').textContent='¡TEMA CREADO! ';
     document.getElementById('gen-sub').textContent=nombreFinal+' · '+preguntas.length+' preguntas listas';
     await sleep(2000);
-    toast('✅ '+nombreFinal+' guardado correctamente');
+    toast('OK: '+nombreFinal+' guardado correctamente');
     showScreen('s-alumno');
   } catch(err){
     setStep(2);
-    document.getElementById('crear-step2-err').textContent='❌ '+err.message;
+    document.getElementById('crear-step2-err').textContent='ERROR: '+err.message;
     document.getElementById('crear-step2-err').classList.add('show');
   }
 }
@@ -1251,7 +1249,7 @@ async function fileToImages(file){
         return[await blobToB64(jpegBlob)];
       }catch(e){throw new Error('HEIC "'+file.name+'" no convertible: '+e.message);}
     }
-    throw new Error('HEIC no soportado aquí. Solución: iPhone → Ajustes → Cámara → Formatos → Máxima Compatibilidad (fotos en JPG).');
+    throw new Error('HEIC no soportado. Solucion: iPhone > Ajustes > Camara > Formatos > Maxima Compatibilidad (fotos JPG).');
   }
   // ── JPG / PNG / WEBP ─────────────────────────────────────────
   try{return[await blobToB64(file)];}
@@ -1277,7 +1275,7 @@ async function cargarTemas(modo){
       firebase.query(firebase.collection(db,'temas'),firebase.where('userId','==',currentUser.id))
     );
     if(snap.empty){
-      list.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);font-weight:700">No tienes temas guardados todavía.<br>Pulsa ✨ <strong>Crear Tema</strong> para empezar.</div>';
+      list.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);font-weight:700">No tienes temas guardados todavía.<br>Pulsa  <strong>Crear Tema</strong> para empezar.</div>';
       return;
     }
     const temas=[];
@@ -1320,9 +1318,9 @@ function confirmarBorrarTema(temaId,nombre){
     closeModal('modal-confirm');
     try{
       await firebase.deleteDoc(firebase.doc(db,'temas',temaId));
-      toast('🗑️ Tema eliminado');
+      toast('Tema eliminado');
       await cargarTemas(temasModo);
-    }catch(e){toast('❌ Error: '+e.message);}
+    }catch(e){toast('Error: '+e.message);}
   };
   openModal('modal-confirm');
 }
@@ -1398,7 +1396,7 @@ async function toggleUserHabilitado(userId, newState){
     await firebase.updateDoc(firebase.doc(db,'users',userId),{ habilitado: newState });
     toast(newState ? '🔓 Alumno habilitado' : '🔒 Alumno deshabilitado');
     await loadUserList();
-  } catch(e){ toast('❌ Error: '+e.message); }
+  } catch(e){ toast('Error: '+e.message); }
 }
 
 function confirmDeleteUser(userId, nombre){
@@ -1407,9 +1405,9 @@ function confirmDeleteUser(userId, nombre){
     closeModal('modal-confirm');
     try {
       await firebase.deleteDoc(firebase.doc(db,'users',userId));
-      toast('🗑️ Alumno eliminado');
+      toast('Alumno eliminado');
       await loadUserList();
-    } catch(e){ toast('❌ Error: '+e.message); }
+    } catch(e){ toast('Error: '+e.message); }
   };
   openModal('modal-confirm');
 }
@@ -1418,7 +1416,7 @@ function confirmDeleteUser(userId, nombre){
 //  ADMIN — MODAL NUEVO / EDITAR ALUMNO
 // ════════════════════════════════════════════════════════════════
 function openModalNuevoAlumno(){
-  document.getElementById('modal-alumno-title').textContent = '➕ Nuevo Alumno';
+  document.getElementById('modal-alumno-title').textContent = ' Nuevo Alumno';
   document.getElementById('edit-user-id').value = '';
   document.getElementById('form-nombre').value = '';
   document.getElementById('form-pin').value = '';
@@ -1430,7 +1428,7 @@ function openModalNuevoAlumno(){
 }
 
 function openModalEditarAlumno(u){
-  document.getElementById('modal-alumno-title').textContent = '✏️ Editar Alumno';
+  document.getElementById('modal-alumno-title').textContent = 'Editar Alumno';
   document.getElementById('edit-user-id').value = u.id;
   document.getElementById('form-nombre').value = u.nombre||'';
   document.getElementById('form-pin').value = '';  // blank = keep current
@@ -1457,14 +1455,14 @@ async function saveAlumno(){
   const errEl  = document.getElementById('modal-alumno-err');
   errEl.classList.remove('show');
 
-  if(!nombre){ errEl.textContent='⚠️ Introduce el nombre del alumno'; errEl.classList.add('show'); return; }
+  if(!nombre){ errEl.textContent='Introduce el nombre del alumno'; errEl.classList.add('show'); return; }
 
   const isNew = !userId;
   if(isNew && (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin))){
-    errEl.textContent='⚠️ El PIN debe tener exactamente 4 dígitos'; errEl.classList.add('show'); return;
+    errEl.textContent='El PIN debe tener exactamente 4 digitos'; errEl.classList.add('show'); return;
   }
   if(pin && (pin.length !== 4 || !/^\d{4}$/.test(pin))){
-    errEl.textContent='⚠️ El PIN debe tener exactamente 4 dígitos'; errEl.classList.add('show'); return;
+    errEl.textContent='El PIN debe tener exactamente 4 digitos'; errEl.classList.add('show'); return;
   }
 
   try {
@@ -1484,19 +1482,19 @@ async function saveAlumno(){
       const pinHash = await hashPin(pin);
       let taken = false;
       snap.forEach(d => { if(d.data().pinHash === pinHash) taken = true; });
-      if(taken){ errEl.textContent='⚠️ Ese PIN ya está en uso por otro alumno'; errEl.classList.add('show'); return; }
+      if(taken){ errEl.textContent='Ese PIN ya esta en uso por otro alumno'; errEl.classList.add('show'); return; }
       data.pinHash     = pinHash;
       data.createdAt   = firebase.serverTimestamp();
       await firebase.addDoc(firebase.collection(db,'users'), data);
-      toast('✅ Alumno creado: '+nombre);
+      toast('Alumno creado: '+nombre);
     } else {
       await firebase.updateDoc(firebase.doc(db,'users',userId), data);
-      toast('✅ Alumno actualizado: '+nombre);
+      toast('Alumno actualizado: '+nombre);
     }
     closeModal('modal-alumno');
     await loadUserList();
   } catch(e){
-    errEl.textContent='❌ Error: '+e.message; errEl.classList.add('show');
+    errEl.textContent='Error: '+e.message; errEl.classList.add('show');
   }
 }
 
@@ -1523,8 +1521,8 @@ async function saveApiKey(){
   const errEl = document.getElementById('admin-config-err');
   okEl.classList.remove('show'); errEl.classList.remove('show');
 
-  if(!key){ errEl.textContent='⚠️ Introduce la clave API'; errEl.classList.add('show'); return; }
-  if(!key.startsWith('sk-ant-')){ errEl.textContent='⚠️ La clave debe empezar por sk-ant-'; errEl.classList.add('show'); return; }
+  if(!key){ errEl.textContent='Introduce la clave API'; errEl.classList.add('show'); return; }
+  if(!key.startsWith('sk-ant-')){ errEl.textContent='La clave debe empezar por sk-ant-'; errEl.classList.add('show'); return; }
 
   try {
     // Simple XOR obfuscation (not real encryption, but hides from casual view)
@@ -1532,11 +1530,11 @@ async function saveApiKey(){
     await firebase.updateDoc(firebase.doc(db,'config','admin'),{ apiKey: obf });
     document.getElementById('admin-apikey').value = '';
     document.getElementById('admin-apikey').placeholder = '••• clave guardada (editar para cambiar) •••';
-    okEl.textContent = '✅ Clave API guardada correctamente';
+    okEl.textContent = 'Clave API guardada correctamente';
     okEl.classList.add('show');
     setTimeout(()=>okEl.classList.remove('show'),3000);
   } catch(e){
-    errEl.textContent='❌ Error: '+e.message; errEl.classList.add('show');
+    errEl.textContent='Error: '+e.message; errEl.classList.add('show');
   }
 }
 
@@ -1547,24 +1545,24 @@ async function changeAdminPin(){
   const errEl  = document.getElementById('admin-config-err');
   okEl.classList.remove('show'); errEl.classList.remove('show');
 
-  if(!actual||!nuevo){ errEl.textContent='⚠️ Rellena ambos campos'; errEl.classList.add('show'); return; }
-  if(!/^\d{4}$/.test(nuevo)){ errEl.textContent='⚠️ El PIN nuevo debe tener 4 dígitos'; errEl.classList.add('show'); return; }
+  if(!actual||!nuevo){ errEl.textContent='Rellena ambos campos'; errEl.classList.add('show'); return; }
+  if(!/^\d{4}$/.test(nuevo)){ errEl.textContent='El PIN nuevo debe tener 4 digitos'; errEl.classList.add('show'); return; }
 
   try {
     const snap = await firebase.getDoc(firebase.doc(db,'config','admin'));
     const actualHash = await hashPin(actual);
     if(snap.data().adminPinHash !== actualHash){
-      errEl.textContent='❌ El PIN actual es incorrecto'; errEl.classList.add('show'); return;
+      errEl.textContent='El PIN actual es incorrecto'; errEl.classList.add('show'); return;
     }
     const nuevoHash = await hashPin(nuevo);
     await firebase.updateDoc(firebase.doc(db,'config','admin'),{ adminPinHash: nuevoHash });
     document.getElementById('admin-pin-actual').value='';
     document.getElementById('admin-pin-nuevo').value='';
-    okEl.textContent='✅ PIN de administrador cambiado correctamente';
+    okEl.textContent='PIN de administrador cambiado correctamente';
     okEl.classList.add('show');
     setTimeout(()=>okEl.classList.remove('show'),3000);
   } catch(e){
-    errEl.textContent='❌ Error: '+e.message; errEl.classList.add('show');
+    errEl.textContent='Error: '+e.message; errEl.classList.add('show');
   }
 }
 

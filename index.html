@@ -962,6 +962,13 @@ function crearStep2(){
 
 function onFilesCrear(ev){
   const all = Array.from(ev.target.files);
+  accumulateFiles(all);
+  // Reset input so same files can be re-added if needed
+  ev.target.value = '';
+}
+
+function accumulateFiles(newFiles){
+  const all = newFiles;
   const st    = document.getElementById('uz-status-crear');
   const errEl = document.getElementById('crear-step2-err');
   const warnEl= document.getElementById('crear-step2-warn');
@@ -970,12 +977,19 @@ function onFilesCrear(ev){
   st.textContent = '';
 
   // ── Separate accepted from rejected formats ──────────────────
-  const accepted = all.filter(f=>{
+  const newAccepted = all.filter(f=>{
     const t=f.type.toLowerCase(), n=f.name.toLowerCase();
     return t.startsWith('image/')||t==='application/pdf'||
            n.endsWith('.pdf')||n.endsWith('.heic')||n.endsWith('.heif');
   });
-  const rejected = all.filter(f=>!accepted.includes(f));
+  const rejected = all.filter(f=>!newAccepted.includes(f));
+  // Accumulate: merge with existing, avoid exact duplicates by name+size
+  const existing = uploadedFiles;
+  const merged = [...existing];
+  for(const f of newAccepted){
+    if(!merged.find(x=>x.name===f.name && x.size===f.size)) merged.push(f);
+  }
+  const accepted = merged;
 
   // ── No valid files at all ────────────────────────────────────
   if(accepted.length===0){
@@ -1024,9 +1038,58 @@ function onFilesCrear(ev){
 
   // ── Show warnings if any ─────────────────────────────────────
   if(warnings.length>0){
-    warnEl.textContent = warnings.join(' ');
+    warnEl.textContent = warnings.join(' | ');
     warnEl.classList.add('show');
   }
+  renderFileList();
+}
+
+function renderFileList(){
+  let listEl = document.getElementById('file-list-preview');
+  if(!listEl){
+    listEl = document.createElement('div');
+    listEl.id = 'file-list-preview';
+    listEl.style.cssText = 'margin-top:10px;display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto';
+    const uz = document.getElementById('upload-zone');
+    if(uz) uz.parentNode.insertBefore(listEl, uz.nextSibling);
+  }
+  if(!uploadedFiles.length){ listEl.innerHTML=''; return; }
+  let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+    +'<span style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:1px;text-transform:uppercase">'+uploadedFiles.length+' archivos seleccionados</span>'
+    +'<button onclick="clearAllFiles()" style="background:rgba(255,82,82,.15);border:1px solid rgba(255,82,82,.3);color:var(--red);border-radius:6px;padding:2px 10px;font-size:11px;font-weight:800;cursor:pointer">Borrar todo</button>'
+    +'</div>';
+  uploadedFiles.forEach(function(f,i){
+    var kb=(f.size/1024).toFixed(0);
+    var ext=f.name.split('.').pop().toUpperCase();
+    var extColor=ext==='PDF'?'var(--blue)':ext==='HEIC'||ext==='HEIF'?'var(--purple)':'var(--green)';
+    html+='<div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.03);border-radius:8px;padding:5px 8px;border:1px solid rgba(255,255,255,.06)">'
+      +'<span style="font-size:10px;font-weight:800;color:'+extColor+';background:rgba(0,0,0,.3);padding:1px 5px;border-radius:4px">'+ext+'</span>'
+      +'<span style="flex:1;font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(f.name)+'</span>'
+      +'<span style="font-size:11px;color:var(--muted);flex-shrink:0">'+kb+' KB</span>'
+      +'<button onclick="removeFile('+i+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;font-weight:900" title="Quitar">x</button>'
+      +'</div>';
+  });
+  listEl.innerHTML=html;
+}
+
+function removeFile(idx){
+  uploadedFiles.splice(idx,1);
+  var st=document.getElementById('uz-status-crear');
+  if(!uploadedFiles.length){ if(st)st.textContent=''; renderFileList(); return; }
+  var totalMB=(uploadedFiles.reduce(function(s,f){return s+f.size;},0)/1024/1024).toFixed(1);
+  if(st) st.textContent=uploadedFiles.length+' archivo(s) - '+totalMB+' MB';
+  renderFileList();
+}
+
+function clearAllFiles(){
+  uploadedFiles=[];
+  var st=document.getElementById('uz-status-crear');
+  if(st) st.textContent='';
+  var err=document.getElementById('crear-step2-err');
+  var wrn=document.getElementById('crear-step2-warn');
+  if(err) err.classList.remove('show');
+  if(wrn) wrn.classList.remove('show');
+  renderFileList();
 }
 
 async function crearStep3(){
@@ -1102,8 +1165,10 @@ FORMATO: [{"categoria":"Nombre","pregunta":"...","opciones":["A","B","C","D"],"c
       resp=await fetch('https://api.anthropic.com/v1/messages',{
         signal:controller.signal,
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,
-        'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      headers:{'Content-Type':'application/json',
+          'x-api-key':apiKey,
+          'anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({model:'claude-opus-4-20250514',max_tokens:8000,system:sys,
         messages:[{role:'user',content:[...imgs,
           {type:'text',text:'Analiza estas imágenes y genera exactamente 100 preguntas. Devuelve SOLO el array JSON.'}
@@ -1248,7 +1313,7 @@ async function fileToImages(file){
         return[await blobToB64(jpegBlob)];
       }catch(e){throw new Error('HEIC "'+file.name+'" no convertible: '+e.message);}
     }
-    throw new Error('HEIC no soportado. Solucion: iPhone > Ajustes > Camara > Formatos > Maxima Compatibilidad (fotos JPG).');
+    throw new Error('Formato HEIC no convertible en este momento. Para convertir: en Mac haz clic derecho sobre la foto > Acciones rapidas > Convertir imagen > JPEG. Luego sube el JPG resultante.');
   }
   //  JPG / PNG / WEBP 
   try{return[await blobToB64(file)];}
@@ -1372,9 +1437,9 @@ function buildUserItem(u){
       </div>
     </div>
     <div class="user-actions">
-      <div class="icon-btn" title="Editar" onclick="openModalEditarAlumno(${JSON.stringify(u).replace(/"/g,'&quot;')})"></div>
-      <div class="icon-btn" title="Habilitar/Deshabilitar" onclick="toggleUserHabilitado('${u.id}',${!u.habilitado})">${u.habilitado?'L':'U'}</div>
-      <div class="icon-btn" title="Eliminar" onclick="confirmDeleteUser('${u.id}','${esc(u.nombre)}')"></div>
+      <div class="icon-btn" title="Editar" onclick="openModalEditarAlumno(${JSON.stringify(u).replace(/"/g,'&quot;')})" style="font-size:11px;font-weight:800">Editar</div>
+      <div class="icon-btn" onclick="toggleUserHabilitado('${u.id}',${!u.habilitado})" style="font-size:11px;font-weight:800;color:${u.habilitado?'var(--red)':'var(--green)'}">${u.habilitado?'Desact':'Activ'}</div>
+      <div class="icon-btn" onclick="confirmDeleteUser('${u.id}','${esc(u.nombre)}')" style="font-size:11px;font-weight:800;color:var(--red)">Borrar</div>
     </div>`;
   return div;
 }
@@ -1572,9 +1637,32 @@ function openModal(id){ document.getElementById(id).style.display='flex'; }
 function closeModal(id){ document.getElementById(id).style.display='none'; }
 function closeModalIfBg(e,id){ if(e.target.id===id) closeModal(id); }
 
-// 
-//  TOAST
-// 
+// ── Drag & drop setup ────────────────────────────────────────────
+(function setupDragDrop(){
+  function init(){
+    var uz=document.getElementById('upload-zone');
+    if(!uz){ setTimeout(init,500); return; }
+    function hi(){ uz.style.borderColor='var(--blue)'; uz.style.background='rgba(64,196,255,.15)'; }
+    function lo(){ uz.style.borderColor=''; uz.style.background=''; }
+    uz.addEventListener('dragenter',function(e){e.preventDefault();e.stopPropagation();hi();});
+    uz.addEventListener('dragover', function(e){e.preventDefault();e.stopPropagation();hi();});
+    uz.addEventListener('dragleave',function(e){e.stopPropagation();lo();});
+    uz.addEventListener('drop',function(e){
+      e.preventDefault();e.stopPropagation();lo();
+      var files=Array.from(e.dataTransfer.files).filter(function(f){
+        var t=f.type.toLowerCase(),n=f.name.toLowerCase();
+        return t.startsWith('image/')||t==='application/pdf'||n.endsWith('.pdf')||n.endsWith('.heic')||n.endsWith('.heif');
+      });
+      if(files.length) accumulateFiles(files);
+      else toast('Formato no admitido. Usa JPG, PNG, WEBP, HEIC o PDF.');
+    });
+  }
+  init();
+})();
+document.addEventListener('dragover',function(e){e.preventDefault();});
+document.addEventListener('drop',function(e){e.preventDefault();});
+
+// ── TOAST
 function toast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');

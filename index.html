@@ -406,7 +406,7 @@ body::after{
     <div class="greeting-avatar" id="alumno-avatar">🌟</div>
     <div>
       <div class="greeting-name" id="alumno-name">¡Hola!</div>
-      <div class="greeting-status" id="alumno-status">● Conectado</div>
+      <div class="greeting-status" id="alumno-status">Conectado</div>
     </div>
     <button class="btn btn-outline btn-sm" style="width:auto;margin-left:auto" onclick="logout()">Salir</button>
   </div>
@@ -459,7 +459,7 @@ body::after{
     <div class="user-list" id="user-list">
       <div style="text-align:center;padding:20px;color:var(--muted)">
         <div class="spinner"></div>
-        Cargando alumnos…
+        Cargando alumnos...
       </div>
     </div>
     <div style="margin-top:14px">
@@ -485,7 +485,7 @@ body::after{
         <div>1️⃣ Ve a <a href="https://platform.claude.com/settings/keys" target="_blank" style="color:var(--gold);font-weight:800">platform.claude.com/settings/keys</a></div>
         <div>2️⃣ Inicia sesión con tu cuenta de Anthropic (o crea una)</div>
         <div>3️⃣ Añade un método de pago en <strong>Billing</strong> y carga mínimo $5</div>
-        <div>4️⃣ Ve a <strong>API Keys</strong> → pulsa <strong>"Create Key"</strong></div>
+        <div>4️⃣ Ve a <strong>API Keys</strong> -> pulsa <strong>"Create Key"</strong></div>
         <div>5️⃣ Ponle un nombre (ej: "Entrenador") y copia la clave completa</div>
         <div>6️⃣ Pégala aquí abajo y pulsa <strong>Guardar</strong></div>
         <div style="margin-top:8px;padding:8px;background:rgba(255,215,0,.08);border-radius:8px;color:var(--gold)">
@@ -559,7 +559,7 @@ body::after{
     <div class="field-wrap">
       <div class="field-label" style="margin-bottom:8px">Elige un icono</div>
       <div class="emoji-grid">
-        <span class="emoji-opt selected" onclick="pickEmoji('📖',this)">📖</span>
+        <span class="emoji-opt selected" onclick="pickEmoji('?',this)">📖</span>
         <span class="emoji-opt" onclick="pickEmoji('🔬',this)">🔬</span>
         <span class="emoji-opt" onclick="pickEmoji('🧪',this)">🧪</span>
         <span class="emoji-opt" onclick="pickEmoji('🌍',this)">🌍</span>
@@ -607,8 +607,8 @@ body::after{
   <!-- STEP 3 -->
   <div class="card" id="crear-step3" style="display:none;text-align:center;padding:36px 24px">
     <div class="spinner" style="width:64px;height:64px;border-width:5px;margin-bottom:16px"></div>
-    <div style="font-family:'Bangers',cursive;font-size:26px;letter-spacing:2px;color:var(--gold)" id="gen-title">GENERANDO PREGUNTAS…</div>
-    <div style="font-size:13px;color:var(--muted);font-weight:700;margin-top:8px" id="gen-sub">La IA está leyendo tus apuntes 🤓</div>
+    <div style="font-family:'Bangers',cursive;font-size:26px;letter-spacing:2px;color:var(--gold)" id="gen-title">GENERANDO PREGUNTAS...</div>
+    <div style="font-size:13px;color:var(--muted);font-weight:700;margin-top:8px" id="gen-sub">La IA esta leyendo tus apuntes</div>
     <ul style="list-style:none;margin-top:20px;text-align:left;display:inline-block" id="gen-steps-list">
       <li class="gstep active" id="gstep-1"><div class="gstep-dot"></div>Procesando imágenes</li>
       <li class="gstep" id="gstep-2"><div class="gstep-dot"></div>Analizando contenido con IA</li>
@@ -625,7 +625,7 @@ body::after{
   </div>
   <div class="card">
     <div id="temas-list">
-      <div style="text-align:center;padding:20px;color:var(--muted)"><div class="spinner"></div>Cargando…</div>
+      <div style="text-align:center;padding:20px;color:var(--muted)"><div class="spinner"></div>Cargando...</div>
     </div>
     <button class="btn btn-outline" style="margin-top:14px" onclick="goBack()">← Volver</button>
   </div>
@@ -876,9 +876,9 @@ function enterAlumno(){
   const initial = (currentUser.nombre||'?')[0].toUpperCase();
   document.getElementById('alumno-avatar').textContent = initial;
   document.getElementById('alumno-name').textContent = '¡Hola, ' + currentUser.nombre + '!';
-  const cursoStr = currentUser.curso ? ' · 📚 '+cursoLabel(currentUser.curso) : '';
-  document.getElementById('alumno-status').textContent = '● Conectado' + cursoStr +
-    ' · ' + (currentUser.puedeCrearTemas ? 'Puede crear temas' : 'Solo lectura');
+  const cursoStr = currentUser.curso ? ' - '+cursoLabel(currentUser.curso) : '';
+  document.getElementById('alumno-status').textContent = 'Conectado' + cursoStr +
+    ' - ' + (currentUser.puedeCrearTemas ? 'Puede crear temas' : 'Solo lectura');
 
   // Show/hide CREAR based on permission
   const mcCrear = document.getElementById('mc-crear');
@@ -921,13 +921,13 @@ function goBack(){
 // ════════════════════════════════════════════════════════════════
 //  FASE 2 — CREAR TEMA
 // ════════════════════════════════════════════════════════════════
-let chosenEmoji = '📖';
+let chosenEmoji = '';
 let uploadedFiles = [];
 
 function irACrear(){
   if(!currentUser?.puedeCrearTemas){ toast('Sin permiso para crear temas'); return; }
   document.getElementById('tema-nombre').value = '';
-  chosenEmoji = '📖'; uploadedFiles = [];
+  chosenEmoji = ''; uploadedFiles = [];
   document.getElementById('uz-status-crear').textContent = '';
   document.getElementById('crear-step2-err').classList.remove('show');
   document.querySelectorAll('.emoji-opt').forEach(e=>e.classList.remove('selected'));
@@ -1020,12 +1020,11 @@ function onFilesCrear(ev){
   if(imgs>0)  parts.push(imgs+' imagen'+(imgs>1?'es':''));
   if(heics>0) parts.push(heics+' HEIC');
   if(pdfs>0)  parts.push(pdfs+' PDF');
-  st.textContent = 'OK: '+uploadedFiles.length+' archivo(s) listos: '+parts.join(' · ')+' · '+totalMB+' MB';
+  st.textContent = 'OK: '+uploadedFiles.length+' archivo(s) listos: '+parts.join(' + ')+' - '+totalMB+' MB';
 
   // ── Show warnings if any ─────────────────────────────────────
   if(warnings.length>0){
-    warnEl.textContent = warnings.join('
-');
+    warnEl.textContent = warnings.join(' ');
     warnEl.classList.add('show');
   }
 }
@@ -1051,7 +1050,7 @@ async function generarPreguntas(apiKey){
   try {
     // Compress images
     const imgs=[]; const skipped=[]; const files=uploadedFiles.slice(0,MAX_FILES); let totalKB=0;
-    document.getElementById('gen-sub').textContent='Comprimiendo '+files.length+' archivo(s)…';
+    document.getElementById('gen-sub').textContent='Comprimiendo '+files.length+' archivo(s)...';
     for(let fi=0;fi<files.length;fi++){
       document.getElementById('gen-sub').textContent=' Procesando '+(fi+1)+'/'+files.length+': '+files[fi].name;
       try {
@@ -1081,7 +1080,7 @@ async function generarPreguntas(apiKey){
     );
     setGStep(1,'done'); setGStep(2,'active');
     const resumen = imgs.length+' páginas listas ('+totalKB+' KB)'+(skipped.length?' · '+skipped.length+' omitidos':'')+'.';
-    document.getElementById('gen-sub').textContent=resumen+' Enviando a la IA…';
+    document.getElementById('gen-sub').textContent=resumen+' Enviando a la IA...';
 
     // Call Anthropic API
     const sys=`Eres un experto profesor del sistema educativo español (LOMLOE).
@@ -1120,19 +1119,19 @@ FORMATO: [{"categoria":"Nombre","pregunta":"...","opciones":["A","B","C","D"],"c
       let apiErrMsg='Error desconocido';
       try{
         const e=await resp.json(); const m=e.error?.message||'';
-        if(resp.status===401) apiErrMsg='Clave API incorrecta o expirada.\n→ Ve al Configurador y guarda una clave válida (sk-ant-api03-…).';
-        else if(resp.status===403) apiErrMsg='Sin permisos. La clave API no tiene acceso a este modelo.\n→ Comprueba que la clave es correcta en console.anthropic.com';
-        else if(resp.status===429) apiErrMsg='Demasiadas peticiones seguidas.\n→ Espera 1-2 minutos e inténtalo de nuevo.';
-        else if(resp.status===400 && m.includes('too large')) apiErrMsg='Las imagenes pesan demasiado incluso comprimidas.\n→ Prueba con menos archivos (10 o menos) o imágenes más pequeñas.';
-        else if(resp.status===400) apiErrMsg='❌ Petición incorrecta: '+m;
-        else if(resp.status===500) apiErrMsg='Error interno del servidor de Anthropic.\n→ Inténtalo de nuevo en unos minutos.';
-        else if(resp.status===529) apiErrMsg='El servidor de la IA está saturado ahora mismo.\n→ Espera unos minutos e inténtalo de nuevo.';
+        if(resp.status===401) apiErrMsg='Clave API incorrecta o expirada.\n-> Ve al Configurador y guarda una clave válida (sk-ant-api03-...).';
+        else if(resp.status===403) apiErrMsg='Sin permisos. La clave API no tiene acceso a este modelo.\n-> Comprueba que la clave es correcta en console.anthropic.com';
+        else if(resp.status===429) apiErrMsg='Demasiadas peticiones seguidas.\n-> Espera 1-2 minutos e inténtalo de nuevo.';
+        else if(resp.status===400 && m.includes('too large')) apiErrMsg='Las imagenes pesan demasiado incluso comprimidas.\n-> Prueba con menos archivos (10 o menos) o imágenes más pequeñas.';
+        else if(resp.status===400) apiErrMsg='Peticion incorrecta: '+m;
+        else if(resp.status===500) apiErrMsg='Error interno del servidor de Anthropic.\n-> Intentalo de nuevo en unos minutos.';
+        else if(resp.status===529) apiErrMsg='El servidor de la IA está saturado ahora mismo. \n-> Espera unos minutos e inténtalo de nuevo.';
         else apiErrMsg='Error '+resp.status+': '+m;
       }catch(_){ apiErrMsg='Error '+resp.status+' (respuesta no válida del servidor)'; }
       throw new Error(apiErrMsg);
     }
     setGStep(2,'done'); setGStep(3,'active');
-    document.getElementById('gen-sub').textContent='Procesando respuesta de la IA…';
+    document.getElementById('gen-sub').textContent='Procesando respuesta de la IA...';
 
     const data=await resp.json();
     let raw=data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
@@ -1143,20 +1142,20 @@ FORMATO: [{"categoria":"Nombre","pregunta":"...","opciones":["A","B","C","D"],"c
       if(m) preguntas=JSON.parse(m[0]);
       else throw new Error(
       'La IA no devolvió las preguntas en el formato esperado.\n'
-      +'→ Inténtalo de nuevo. Si el error persiste, prueba con menos imágenes o más claras.'
+      +'-> Intentalo de nuevo. Si el error persiste, prueba con menos imágenes o más claras.'
     );
     }
     if(!Array.isArray(preguntas)||preguntas.length<10) throw new Error(
       'La IA generó muy pocas preguntas ('+( Array.isArray(preguntas)?preguntas.length:0)+').\n'
-      +'→ Asegúrate de que las imágenes son legibles y contienen texto suficiente.\n'
-      +'→ Evita fotos borrosas, con poca luz o muy inclinadas.'
+      +'-> Asegurate de que las imágenes son legibles y contienen texto suficiente.\n'
+      +'-> Evita fotos borrosas, con poca luz o muy inclinadas.'
     );
     while(preguntas.length<100) preguntas.push(preguntas[Math.floor(Math.random()*preguntas.length)]);
     preguntas=preguntas.slice(0,100);
 
     // Save to Firebase with unique sequential name
     setGStep(3,'done'); setGStep(4,'active');
-    document.getElementById('gen-sub').textContent='Guardando en tu biblioteca…';
+    document.getElementById('gen-sub').textContent='Guardando en tu biblioteca...';
     const nombreFinal=await buildUniqueTemaName(nombre);
     await firebase.addDoc(firebase.collection(db,'temas'),{
       userId:currentUser.id, nombre:nombreFinal, emoji:chosenEmoji,
@@ -1194,7 +1193,7 @@ function setGStep(n,s){
 }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
-// ── IMAGE PIPELINE ──────────────────────────────────────────────
+//  IMAGE PIPELINE 
 // JPG/PNG/WEBP: always · HEIC: heic2any CDN · PDF: pdf.js if available
 const MAX_FILES=25, MAX_SLOTS=50;
 
@@ -1220,7 +1219,7 @@ function readerFallback(blob,res,rej){
 }
 async function fileToImages(file){
   const name=file.name.toLowerCase(),mime=(file.type||'').toLowerCase();
-  // ── PDF ──────────────────────────────────────────────────────
+  //  PDF 
   if(name.endsWith('.pdf')||mime==='application/pdf'){
     if(typeof pdfjsLib!=='undefined'){
       try{
@@ -1237,7 +1236,7 @@ async function fileToImages(file){
     try{return[await blobToB64(file)];}
     catch(_){throw new Error('PDF "'+file.name+'" no procesable. Convierte las páginas a JPG.');}
   }
-  // ── HEIC/HEIF (iPhone) ───────────────────────────────────────
+  //  HEIC/HEIF (iPhone) 
   if(name.endsWith('.heic')||name.endsWith('.heif')||mime==='image/heic'||mime==='image/heif'){
     // Strategy 1: native browser (Safari 17+, Chrome 105+)
     try{const bm=await createImageBitmap(file);const b64=canvasToB64(bm);bm.close&&bm.close();return[b64];}catch(_){}
@@ -1251,14 +1250,14 @@ async function fileToImages(file){
     }
     throw new Error('HEIC no soportado. Solucion: iPhone > Ajustes > Camara > Formatos > Maxima Compatibilidad (fotos JPG).');
   }
-  // ── JPG / PNG / WEBP ─────────────────────────────────────────
+  //  JPG / PNG / WEBP 
   try{return[await blobToB64(file)];}
   catch(e){throw new Error('No se pudo leer "'+file.name+'": '+e.message);}
 }
 
-// ════════════════════════════════════════════════════════════════
-//  FASE 2 — ABRIR / BORRAR TEMA
-// ════════════════════════════════════════════════════════════════
+// 
+//  FASE 2  ABRIR / BORRAR TEMA
+// 
 let temasModo = 'abrir';
 
 function irAAbrir(){ cargarTemas('abrir'); }
@@ -1266,10 +1265,10 @@ function irABorrar(){ cargarTemas('borrar'); }
 
 async function cargarTemas(modo){
   temasModo=modo;
-  document.getElementById('temas-screen-title').textContent = modo==='abrir'?'🎮 ABRIR TEMA':'🗑️ BORRAR TEMA';
+  document.getElementById('temas-screen-title').textContent = modo==='abrir'?'ABRIR TEMA':'BORRAR TEMA';
   showScreen('s-temas');
   const list=document.getElementById('temas-list');
-  list.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)"><div class="spinner"></div>Cargando temas…</div>';
+  list.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)"><div class="spinner"></div>Cargando temas...</div>';
   try {
     const snap=await firebase.getDocs(
       firebase.query(firebase.collection(db,'temas'),firebase.where('userId','==',currentUser.id))
@@ -1292,15 +1291,15 @@ function buildTemaItem(t,modo){
   const div=document.createElement('div'); div.className='tema-item';
   const fecha=t.createdAt?.toDate?t.createdAt.toDate().toLocaleDateString('es-ES'):'';
   div.innerHTML=
-    '<div class="tema-emoji">'+( t.emoji||'📖')+'</div>'+
+    '<div class="tema-emoji">'+( t.emoji||'?')+'</div>'+
     '<div class="tema-info">'+
       '<div class="tema-nombre">'+esc(t.nombre)+'</div>'+
       '<div class="tema-meta">'+(t.totalPregs||0)+' preguntas · '+fecha+'</div>'+
     '</div>'+
     '<div class="tema-actions">'+
       (modo==='abrir'
-        ? '<button class="btn btn-gold btn-sm" onclick="abrirJuego(\''+t.id+'\',\''+esc(t.nombre)+'\','+( t.totalPregs||0)+',\''+( t.emoji||'📖')+'\')">▶ Jugar</button>'
-        : '<button class="btn btn-red btn-sm" onclick="confirmarBorrarTema(\''+t.id+'\',\''+esc(t.nombre)+'\')">🗑️ Borrar</button>'
+        ? '<button class="btn btn-gold btn-sm" onclick="abrirJuego(\''+t.id+'\',\''+esc(t.nombre)+'\','+( t.totalPregs||0)+',\''+( t.emoji||'?')+'\')" >Jugar</button>'
+        : '<button class="btn btn-red btn-sm" onclick="confirmarBorrarTema(\''+t.id+'\',\''+esc(t.nombre)+'\')" >Borrar</button>'
       )+
     '</div>';
   return div;
@@ -1326,7 +1325,7 @@ function confirmarBorrarTema(temaId,nombre){
 }
 
 function irAHistorial(){
-  showSoon('🏆','Mis Récords','Tu historial de partidas, puntuaciones y rachas. ¡Disponible en la Fase 3!');
+  showSoon('?','Mis Récords','Tu historial de partidas, puntuaciones y rachas. ¡Disponible en la Fase 3!');
 }
 function showSoon(icon,title,desc){
   document.getElementById('soon-icon').textContent=icon;
@@ -1335,9 +1334,9 @@ function showSoon(icon,title,desc){
   showScreen('s-soon');
 }
 
-// ════════════════════════════════════════════════════════════════
-//  ADMIN — USER LIST
-// ════════════════════════════════════════════════════════════════
+// 
+//  ADMIN  USER LIST
+// 
 async function loadUserList(){
   const list = document.getElementById('user-list');
   list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted)"><div class="spinner"></div></div>';
@@ -1369,13 +1368,13 @@ function buildUserItem(u){
       <div class="user-meta">
         <span class="badge ${u.habilitado?'badge-green':'badge-red'}">${u.habilitado?'Activo':'Inactivo'}</span>
         ${u.puedeCrearTemas?'<span class="badge badge-blue" style="margin-left:4px">Crea temas</span>':''}
-        ${u.curso?'<span class="badge" style="margin-left:4px;background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.25)">📚 '+cursoLabel(u.curso)+'</span>':''}
+        ${u.curso?'<span class="badge" style="margin-left:4px;background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.25)">'+ cursoLabel(u.curso)+'</span>':''}
       </div>
     </div>
     <div class="user-actions">
-      <div class="icon-btn" title="Editar" onclick="openModalEditarAlumno(${JSON.stringify(u).replace(/"/g,'&quot;')})">✏️</div>
-      <div class="icon-btn" title="Habilitar/Deshabilitar" onclick="toggleUserHabilitado('${u.id}',${!u.habilitado})">${u.habilitado?'🔒':'🔓'}</div>
-      <div class="icon-btn" title="Eliminar" onclick="confirmDeleteUser('${u.id}','${esc(u.nombre)}')">🗑️</div>
+      <div class="icon-btn" title="Editar" onclick="openModalEditarAlumno(${JSON.stringify(u).replace(/"/g,'&quot;')})"></div>
+      <div class="icon-btn" title="Habilitar/Deshabilitar" onclick="toggleUserHabilitado('${u.id}',${!u.habilitado})">${u.habilitado?'L':'U'}</div>
+      <div class="icon-btn" title="Eliminar" onclick="confirmDeleteUser('${u.id}','${esc(u.nombre)}')"></div>
     </div>`;
   return div;
 }
@@ -1394,7 +1393,7 @@ function cursoLabel(c){
 async function toggleUserHabilitado(userId, newState){
   try {
     await firebase.updateDoc(firebase.doc(db,'users',userId),{ habilitado: newState });
-    toast(newState ? '🔓 Alumno habilitado' : '🔒 Alumno deshabilitado');
+    toast(newState ? 'Alumno habilitado' : 'Alumno deshabilitado');
     await loadUserList();
   } catch(e){ toast('Error: '+e.message); }
 }
@@ -1412,9 +1411,9 @@ function confirmDeleteUser(userId, nombre){
   openModal('modal-confirm');
 }
 
-// ════════════════════════════════════════════════════════════════
-//  ADMIN — MODAL NUEVO / EDITAR ALUMNO
-// ════════════════════════════════════════════════════════════════
+// 
+//  ADMIN  MODAL NUEVO / EDITAR ALUMNO
+// 
 function openModalNuevoAlumno(){
   document.getElementById('modal-alumno-title').textContent = ' Nuevo Alumno';
   document.getElementById('edit-user-id').value = '';
@@ -1498,9 +1497,9 @@ async function saveAlumno(){
   }
 }
 
-// ════════════════════════════════════════════════════════════════
-//  ADMIN — API KEY & PIN CHANGES
-// ════════════════════════════════════════════════════════════════
+// 
+//  ADMIN  API KEY & PIN CHANGES
+// 
 function toggleApiInfo(){
   const box = document.getElementById('api-info-box');
   box.style.display = box.style.display === 'none' ? 'block' : 'none';
@@ -1510,7 +1509,7 @@ async function loadAdminApiKey(){
   try {
     const snap = await firebase.getDoc(firebase.doc(db,'config','admin'));
     if(snap.exists() && snap.data().apiKey){
-      document.getElementById('admin-apikey').placeholder = '••• clave guardada (editar para cambiar) •••';
+      document.getElementById('admin-apikey').placeholder = '*** clave guardada (editar para cambiar) ***';
     }
   } catch(e){}
 }
@@ -1529,7 +1528,7 @@ async function saveApiKey(){
     const obf = btoa(key.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^(73+i%17))).join(''));
     await firebase.updateDoc(firebase.doc(db,'config','admin'),{ apiKey: obf });
     document.getElementById('admin-apikey').value = '';
-    document.getElementById('admin-apikey').placeholder = '••• clave guardada (editar para cambiar) •••';
+    document.getElementById('admin-apikey').placeholder = '*** clave guardada (editar para cambiar) ***';
     okEl.textContent = 'Clave API guardada correctamente';
     okEl.classList.add('show');
     setTimeout(()=>okEl.classList.remove('show'),3000);
@@ -1566,16 +1565,16 @@ async function changeAdminPin(){
   }
 }
 
-// ════════════════════════════════════════════════════════════════
+// 
 //  MODALS
-// ════════════════════════════════════════════════════════════════
+// 
 function openModal(id){ document.getElementById(id).style.display='flex'; }
 function closeModal(id){ document.getElementById(id).style.display='none'; }
 function closeModalIfBg(e,id){ if(e.target.id===id) closeModal(id); }
 
-// ════════════════════════════════════════════════════════════════
+// 
 //  TOAST
-// ════════════════════════════════════════════════════════════════
+// 
 function toast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');

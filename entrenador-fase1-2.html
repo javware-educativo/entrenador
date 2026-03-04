@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎮 Entrenador</title>
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc, query, where, addDoc, serverTimestamp }
+  from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+// ══════════════════════════════════════════════════════════════════
+//  🔧 CONFIGURACIÓN FIREBASE — Sustituye estos valores por los tuyos
+//  (los obtendrás en el Paso 2 de la guía de instalación)
+// ══════════════════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyCu0JMkzPxjcYUuEjQfvxgHrlXvR6g68b0",
+  authDomain:        "entrenador-educativo.firebaseapp.com",
+  projectId:         "entrenador-educativo",
+  storageBucket:     "entrenador-educativo.firebasestorage.app",
+  messagingSenderId: "542511476770",
+  appId:             "1:542511476770:web:daf205cd746b8f9cc29a7b"
+};
+// ══════════════════════════════════════════════════════════════════
+
+const fbApp = initializeApp(FIREBASE_CONFIG);
+const db    = getFirestore(fbApp);
+
+// ── Simple PIN hash (SHA-256 via WebCrypto) ───────────────────────
+async function hashPin(pin){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('IRIS_SALT_' + pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// ── Expose DB + helpers to window for non-module code ─────────────
+window._db = db;
+window._hashPin = hashPin;
+window._firebase = { doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc, query, where, addDoc, serverTimestamp };
+window._firebaseReady = true;
+window.dispatchEvent(new Event('firebaseReady'));
+</script>
+
+<style>
+/* ═══ RESET & ROOT ═══════════════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --gold:#FFD700;--gold2:#FFA500;--green:#00E676;--red:#FF5252;
+  --blue:#40C4FF;--purple:#E040FB;--cyan:#18FFFF;--orange:#FF9800;
+  --bg:#08081A;--card:#11112A;--card2:#181835;
+  --border:rgba(255,215,0,0.2);--text:#F0F0FF;--muted:#7777AA;
+}
+html,body{height:100%;overflow-x:hidden}
+body{
+  font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;
+  background-image:
+    radial-gradient(ellipse at 20% 20%,rgba(224,64,251,0.1) 0%,transparent 50%),
+    radial-gradient(ellipse at 80% 80%,rgba(64,196,255,0.08) 0%,transparent 50%);
+}
+body::after{
+  content:'';position:fixed;inset:0;
+  background-image:radial-gradient(rgba(255,215,0,0.05) 1px,transparent 1px);
+  background-size:36px 36px;pointer-events:none;z-index:0;
+}
+
+/* ═══ LAYOUT ════════════════════════════════════════════════════ */
+.app{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px 16px 40px}
+.screen{display:none;width:100%;max-width:680px;flex-direction:column;align-items:center;gap:18px}
+.screen.active{display:flex;animation:fadeUp .4s cubic-bezier(.22,1,.36,1) forwards}
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:none}}
+
+/* ═══ LOGO ══════════════════════════════════════════════════════ */
+.logo-wrap{text-align:center;padding:8px 0}
+.logo-emoji{font-size:58px;display:block;animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1) rotate(-2deg)}50%{transform:scale(1.07) rotate(2deg)}}
+.logo-title{
+  font-family:'Bangers',cursive;font-size:clamp(36px,9vw,64px);
+  letter-spacing:3px;line-height:1;
+  background:linear-gradient(135deg,#FFD700,#FF8C00 40%,#FF5252 70%,#E040FB);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  filter:drop-shadow(0 0 10px rgba(255,215,0,.35));
+}
+.logo-sub{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:2.5px;text-transform:uppercase;margin-top:4px}
+
+/* ═══ CARDS ═════════════════════════════════════════════════════ */
+.card{
+  background:var(--card);border:2px solid var(--border);
+  border-radius:22px;padding:28px;width:100%;
+  box-shadow:0 16px 48px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);
+}
+.card-title{
+  font-family:'Bangers',cursive;font-size:22px;letter-spacing:1.5px;
+  color:var(--gold);margin-bottom:16px;display:flex;align-items:center;gap:10px;
+}
+
+/* ═══ PIN INPUT ═════════════════════════════════════════════════ */
+.pin-wrap{display:flex;flex-direction:column;align-items:center;gap:16px;width:100%}
+.pin-dots{display:flex;gap:14px;margin:8px 0}
+.pin-dot{
+  width:18px;height:18px;border-radius:50%;
+  border:2px solid rgba(255,215,0,.4);background:transparent;
+  transition:all .2s;
+}
+.pin-dot.filled{background:var(--gold);border-color:var(--gold);box-shadow:0 0 10px rgba(255,215,0,.5)}
+.pin-dot.error{background:var(--red);border-color:var(--red);animation:shake .35s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:280px}
+.pin-btn{
+  background:var(--card2);border:2px solid rgba(255,255,255,.08);
+  border-radius:14px;padding:18px;font-family:'Bangers',cursive;
+  font-size:26px;color:var(--text);cursor:pointer;transition:all .15s;
+  text-align:center;
+}
+.pin-btn:hover{border-color:var(--gold);background:rgba(255,215,0,.08);transform:scale(1.04)}
+.pin-btn:active{transform:scale(.96)}
+.pin-btn.del{font-size:20px;color:var(--muted)}
+.pin-btn.del:hover{color:var(--red);border-color:var(--red)}
+.pin-hint{font-size:13px;color:var(--muted);font-weight:700;text-align:center}
+.pin-error{font-size:13px;color:var(--red);font-weight:800;min-height:18px;text-align:center}
+
+/* ═══ BUTTONS ════════════════════════════════════════════════════ */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:13px 28px;border-radius:50px;border:none;cursor:pointer;
+  font-family:'Bangers',cursive;font-size:19px;letter-spacing:1.5px;
+  transition:all .2s;text-transform:uppercase;width:100%;
+}
+.btn-gold{background:linear-gradient(135deg,#FFD700,#FF8C00);color:#1A0A00;box-shadow:0 6px 20px rgba(255,165,0,.4)}
+.btn-gold:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 28px rgba(255,165,0,.55)}
+.btn-green{background:linear-gradient(135deg,#00E676,#00B248);color:#001A08;box-shadow:0 5px 18px rgba(0,230,118,.3)}
+.btn-green:hover:not(:disabled){transform:translateY(-2px)}
+.btn-red{background:linear-gradient(135deg,#FF5252,#C62828);color:white;box-shadow:0 5px 18px rgba(255,82,82,.3)}
+.btn-red:hover:not(:disabled){transform:translateY(-2px)}
+.btn-blue{background:linear-gradient(135deg,#40C4FF,#0091EA);color:#001A2A;box-shadow:0 5px 18px rgba(64,196,255,.3)}
+.btn-blue:hover:not(:disabled){transform:translateY(-2px)}
+.btn-outline{background:transparent;border:2px solid var(--border);color:var(--muted);font-family:'Bangers',cursive;font-size:17px;letter-spacing:1px}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold)}
+.btn-sm{padding:9px 20px;font-size:16px;width:auto}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+
+/* ═══ MENU GRID ══════════════════════════════════════════════════ */
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%}
+@media(max-width:420px){.menu-grid{grid-template-columns:1fr}}
+.menu-card{
+  background:var(--card2);border:2px solid var(--border);border-radius:18px;
+  padding:22px 16px;text-align:center;cursor:pointer;transition:all .22s;
+}
+.menu-card:hover{border-color:var(--gold);transform:translateY(-3px);box-shadow:0 8px 24px rgba(255,215,0,.15)}
+.menu-card:active{transform:scale(.97)}
+.menu-card.disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+.mc-icon{font-size:34px;margin-bottom:8px}
+.mc-title{font-family:'Bangers',cursive;font-size:19px;letter-spacing:1px;color:var(--gold);margin-bottom:4px}
+.mc-desc{font-size:12px;color:var(--muted);font-weight:700;line-height:1.4}
+
+/* ═══ GREETING ═══════════════════════════════════════════════════ */
+.greeting{
+  background:linear-gradient(135deg,rgba(255,215,0,.08),rgba(255,165,0,.04));
+  border:2px solid rgba(255,215,0,.25);border-radius:16px;
+  padding:16px 20px;width:100%;display:flex;align-items:center;gap:14px;
+}
+.greeting-avatar{
+  width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(135deg,var(--purple),var(--blue));
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;flex-shrink:0;
+}
+.greeting-name{font-family:'Bangers',cursive;font-size:22px;letter-spacing:1px;color:var(--gold)}
+.greeting-status{font-size:12px;color:var(--green);font-weight:700;margin-top:2px}
+
+/* ═══ ADMIN PANEL ════════════════════════════════════════════════ */
+.section-title{
+  font-family:'Bangers',cursive;font-size:18px;letter-spacing:1px;
+  color:var(--cyan);margin-bottom:12px;display:flex;align-items:center;gap:8px;
+  padding-bottom:8px;border-bottom:1px solid var(--border);width:100%;
+}
+.user-list{width:100%;display:flex;flex-direction:column;gap:8px}
+.user-item{
+  background:var(--card2);border:1px solid var(--border);border-radius:12px;
+  padding:12px 16px;display:flex;align-items:center;gap:12px;
+}
+.user-item.disabled-user{opacity:.55}
+.user-avatar{
+  width:38px;height:38px;border-radius:50%;
+  background:linear-gradient(135deg,var(--purple),var(--blue));
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;flex-shrink:0;font-weight:900;color:white;
+  font-family:'Nunito',sans-serif;
+}
+.user-info{flex:1;min-width:0}
+.user-name{font-weight:800;font-size:14px;color:var(--text)}
+.user-meta{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px}
+.user-actions{display:flex;gap:6px}
+.icon-btn{
+  width:32px;height:32px;border-radius:8px;border:1px solid var(--border);
+  background:rgba(255,255,255,.04);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;font-size:14px;transition:all .15s;
+}
+.icon-btn:hover{border-color:var(--gold);background:rgba(255,215,0,.08)}
+.badge{
+  display:inline-flex;align-items:center;padding:2px 8px;border-radius:50px;
+  font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;
+}
+.badge-green{background:rgba(0,230,118,.15);color:var(--green);border:1px solid rgba(0,230,118,.3)}
+.badge-red{background:rgba(255,82,82,.12);color:var(--red);border:1px solid rgba(255,82,82,.25)}
+.badge-blue{background:rgba(64,196,255,.12);color:var(--blue);border:1px solid rgba(64,196,255,.25)}
+
+/* ═══ FORM FIELDS ════════════════════════════════════════════════ */
+.field-wrap{width:100%;margin-bottom:12px}
+.field-label{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;display:block}
+.field-input{
+  width:100%;background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.1);
+  border-radius:11px;padding:12px 14px;color:var(--text);font-size:14px;
+  font-family:'Nunito',sans-serif;outline:none;transition:border-color .25s;
+}
+.field-input:focus{border-color:var(--blue)}
+.field-row{display:flex;gap:10px;width:100%}
+.toggle-wrap{display:flex;align-items:center;justify-content:space-between;
+  background:var(--card2);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;margin-bottom:8px;cursor:pointer;transition:border-color .2s}
+.toggle-wrap:hover{border-color:var(--gold)}
+.toggle-label{font-size:13px;font-weight:700;color:var(--text)}
+.toggle-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.toggle{width:42px;height:24px;border-radius:12px;background:rgba(255,255,255,.1);
+  position:relative;transition:background .25s;flex-shrink:0;cursor:pointer}
+.toggle.on{background:var(--green)}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;
+  border-radius:50%;background:white;transition:transform .25s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.toggle.on::after{transform:translateX(18px)}
+
+/* ═══ MODAL ═════════════════════════════════════════════════════ */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);
+  z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;
+  animation:fadeIn .25s ease;
+}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{
+  background:var(--card);border:2px solid var(--border);border-radius:22px;
+  padding:28px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;
+  animation:slideUp .3s cubic-bezier(.22,1,.36,1);
+}
+@keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.modal-title{font-family:'Bangers',cursive;font-size:22px;letter-spacing:1px;color:var(--gold);margin-bottom:20px}
+.modal-actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+
+/* ═══ SEPARATOR & MISC ═══════════════════════════════════════════ */
+.sep{width:100%;height:1px;background:var(--border);margin:4px 0}
+.tip{background:rgba(64,196,255,.07);border:1px solid rgba(64,196,255,.2);
+  border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;
+  color:#90E0FF;line-height:1.5;width:100%}
+.err-msg{background:rgba(255,82,82,.08);border:2px solid rgba(255,82,82,.3);
+  border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;
+  color:#FFA0A0;display:none}
+.err-msg.show{display:block;animation:fadeUp .3s ease}
+.ok-msg{background:rgba(0,230,118,.08);border:2px solid rgba(0,230,118,.25);
+  border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;
+  color:#6EF7A7;display:none}
+.ok-msg.show{display:block;animation:fadeUp .3s ease}
+
+/* ═══ LOADING ════════════════════════════════════════════════════ */
+.spinner{width:48px;height:48px;border-radius:50%;margin:0 auto 12px;
+  border:4px solid rgba(255,215,0,.12);border-top-color:var(--gold);
+  animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ═══ FOOTER ════════════════════════════════════════════════════ */
+.footer{
+  position:fixed;bottom:10px;right:14px;
+  font-size:10px;color:rgba(255,255,255,.18);font-weight:700;
+  letter-spacing:.5px;z-index:10;pointer-events:none;
+}
+
+/* ═══ TOAST ═════════════════════════════════════════════════════ */
+.toast{
+  position:fixed;bottom:28px;left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:var(--card2);border:2px solid var(--gold);border-radius:50px;
+  padding:10px 24px;font-family:'Bangers',cursive;font-size:17px;letter-spacing:1px;
+  color:var(--gold);box-shadow:0 8px 32px rgba(0,0,0,.5);
+  transition:transform .3s cubic-bezier(.22,1,.36,1);z-index:1000;white-space:nowrap;
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ═══ FIREBASE SETUP NOTICE ══════════════════════════════════════ */
+.setup-notice{
+  background:rgba(255,152,0,.08);border:2px solid rgba(255,152,0,.35);
+  border-radius:16px;padding:18px;width:100%;
+}
+.setup-notice h3{font-family:'Bangers',cursive;font-size:20px;color:var(--orange);margin-bottom:10px}
+.setup-notice p{font-size:13px;color:#FFD580;font-weight:700;line-height:1.7}
+.setup-notice code{background:rgba(0,0,0,.3);padding:2px 7px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ════════ PANTALLA: BIENVENIDA / LOGIN ════════ -->
+<div class="screen active" id="s-login">
+  <div class="logo-wrap">
+    <span class="logo-emoji">🎮</span>
+    <div class="logo-title">ENTRENADOR</div>
+    <div class="logo-sub">⚡ Sistema de Estudio Inteligente ⚡</div>
+  </div>
+
+  <div class="card" id="login-card">
+    <div class="card-title">🔐 Introduce tu PIN</div>
+    <div class="pin-wrap">
+      <div class="pin-dots" id="pin-dots">
+        <div class="pin-dot" id="pd0"></div>
+        <div class="pin-dot" id="pd1"></div>
+        <div class="pin-dot" id="pd2"></div>
+        <div class="pin-dot" id="pd3"></div>
+      </div>
+      <div class="pin-error" id="pin-error"></div>
+      <div class="pin-pad" id="pin-pad">
+        <button class="pin-btn" onclick="pinPress('1')">1</button>
+        <button class="pin-btn" onclick="pinPress('2')">2</button>
+        <button class="pin-btn" onclick="pinPress('3')">3</button>
+        <button class="pin-btn" onclick="pinPress('4')">4</button>
+        <button class="pin-btn" onclick="pinPress('5')">5</button>
+        <button class="pin-btn" onclick="pinPress('6')">6</button>
+        <button class="pin-btn" onclick="pinPress('7')">7</button>
+        <button class="pin-btn" onclick="pinPress('8')">8</button>
+        <button class="pin-btn" onclick="pinPress('9')">9</button>
+        <button class="pin-btn" onclick="pinClear()" style="font-size:14px;color:var(--muted)">CLR</button>
+        <button class="pin-btn" onclick="pinPress('0')">0</button>
+        <button class="pin-btn del" onclick="pinDelete()">⌫</button>
+      </div>
+      <div class="pin-hint" id="pin-hint">Ingresa tu PIN de acceso</div>
+    </div>
+  </div>
+
+  <!-- Firebase not configured notice -->
+  <div class="setup-notice" id="setup-notice" style="display:none">
+    <h3>⚙️ Firebase no configurado</h3>
+    <p>Para usar la app necesitas conectar Firebase.<br>
+    Edita el archivo HTML y sustituye los valores en<br>
+    <code>FIREBASE_CONFIG</code> con los de tu proyecto.<br><br>
+    📖 Sigue la guía de instalación incluida abajo.</p>
+  </div>
+</div>
+
+<!-- ════════ PANTALLA: PANEL ALUMNO ════════ -->
+<div class="screen" id="s-alumno">
+  <div class="logo-wrap" style="padding-bottom:0">
+    <div class="logo-title" style="font-size:clamp(28px,7vw,48px)">ENTRENADOR</div>
+  </div>
+
+  <div class="greeting" id="alumno-greeting">
+    <div class="greeting-avatar" id="alumno-avatar">🌟</div>
+    <div>
+      <div class="greeting-name" id="alumno-name">¡Hola!</div>
+      <div class="greeting-status" id="alumno-status">● Conectado</div>
+    </div>
+    <button class="btn btn-outline btn-sm" style="width:auto;margin-left:auto" onclick="logout()">Salir</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📚 ¿Qué hacemos hoy?</div>
+    <div class="menu-grid" id="alumno-menu">
+      <div class="menu-card" id="mc-crear" onclick="irACrear()">
+        <div class="mc-icon">✨</div>
+        <div class="mc-title">CREAR TEMA</div>
+        <div class="mc-desc">Subir apuntes y generar preguntas con IA</div>
+      </div>
+      <div class="menu-card" onclick="irAAbrir()">
+        <div class="mc-icon">🎮</div>
+        <div class="mc-title">ABRIR TEMA</div>
+        <div class="mc-desc">Elegir un tema guardado y jugar</div>
+      </div>
+      <div class="menu-card" onclick="irABorrar()">
+        <div class="mc-icon">🗑️</div>
+        <div class="mc-title">BORRAR TEMA</div>
+        <div class="mc-desc">Eliminar un tema que ya no necesitas</div>
+      </div>
+      <div class="menu-card" id="mc-historial" onclick="irAHistorial()">
+        <div class="mc-icon">🏆</div>
+        <div class="mc-title">MIS RÉCORDS</div>
+        <div class="mc-desc">Ver tu historial de partidas y puntuaciones</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ PANTALLA: PANEL ADMIN ════════ -->
+<div class="screen" id="s-admin">
+  <div class="logo-wrap" style="padding-bottom:0">
+    <div class="logo-title" style="font-size:clamp(26px,6vw,44px)">ENTRENADOR</div>
+  </div>
+
+  <div class="greeting" style="background:rgba(224,64,251,.07);border-color:rgba(224,64,251,.3)">
+    <div class="greeting-avatar" style="background:linear-gradient(135deg,#E040FB,#FF5252)">👑</div>
+    <div>
+      <div class="greeting-name" style="color:var(--purple)">Panel Administrador</div>
+      <div class="greeting-status" style="color:var(--purple)">● Acceso total</div>
+    </div>
+    <button class="btn btn-outline btn-sm" style="width:auto;margin-left:auto" onclick="logout()">Salir</button>
+  </div>
+
+  <!-- Gestión de alumnos -->
+  <div class="card">
+    <div class="card-title">👥 Alumnos</div>
+    <div class="user-list" id="user-list">
+      <div style="text-align:center;padding:20px;color:var(--muted)">
+        <div class="spinner"></div>
+        Cargando alumnos…
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <button class="btn btn-green" onclick="openModalNuevoAlumno()">➕ Nuevo alumno</button>
+    </div>
+  </div>
+
+  <!-- Configuración global -->
+  <div class="card">
+    <div class="card-title">⚙️ Configuración</div>
+
+    <div class="section-title">🔑 API Key Anthropic (IA)</div>
+    <div style="background:rgba(64,196,255,.06);border:1px solid rgba(64,196,255,.2);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:700;color:#90E0FF;line-height:1.6">
+          Necesitas una clave API de Anthropic para que la IA genere preguntas.<br>
+          Si cambias la clave, simplemente pega la nueva y pulsa Guardar.
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="toggleApiInfo()" style="white-space:nowrap;font-size:13px;padding:6px 14px">ℹ️ ¿Cómo obtenerla?</button>
+      </div>
+      <div id="api-info-box" style="display:none;background:rgba(0,0,0,.25);border-radius:10px;padding:14px;margin-bottom:10px;font-size:12px;font-weight:700;color:#C4E8FF;line-height:1.8">
+        <div style="font-family:'Bangers',cursive;font-size:16px;color:var(--cyan);margin-bottom:8px;letter-spacing:1px">📋 PASOS PARA OBTENER TU CLAVE API</div>
+        <div>1️⃣ Ve a <a href="https://platform.claude.com/settings/keys" target="_blank" style="color:var(--gold);font-weight:800">platform.claude.com/settings/keys</a></div>
+        <div>2️⃣ Inicia sesión con tu cuenta de Anthropic (o crea una)</div>
+        <div>3️⃣ Añade un método de pago en <strong>Billing</strong> y carga mínimo $5</div>
+        <div>4️⃣ Ve a <strong>API Keys</strong> → pulsa <strong>"Create Key"</strong></div>
+        <div>5️⃣ Ponle un nombre (ej: "Entrenador") y copia la clave completa</div>
+        <div>6️⃣ Pégala aquí abajo y pulsa <strong>Guardar</strong></div>
+        <div style="margin-top:8px;padding:8px;background:rgba(255,215,0,.08);border-radius:8px;color:var(--gold)">
+          💰 Coste aproximado: 2-5 céntimos por tema generado (100 preguntas)
+        </div>
+      </div>
+      <a href="https://platform.claude.com/settings/keys" target="_blank"
+        style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--gold);text-decoration:none;margin-bottom:10px">
+        🔗 Ir directamente a mis claves API →
+      </a>
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">Pega tu clave API aquí</label>
+      <input type="password" id="admin-apikey" class="field-input" placeholder="sk-ant-api03-...">
+    </div>
+    <button class="btn btn-blue btn-sm" style="width:auto;margin-bottom:20px" onclick="saveApiKey()">💾 Guardar clave API</button>
+
+    <div class="section-title">🔐 PIN de administrador</div>
+    <div class="field-row">
+      <div class="field-wrap" style="margin-bottom:0">
+        <label class="field-label">PIN actual</label>
+        <input type="password" id="admin-pin-actual" class="field-input" maxlength="4" placeholder="••••">
+      </div>
+      <div class="field-wrap" style="margin-bottom:0">
+        <label class="field-label">PIN nuevo</label>
+        <input type="password" id="admin-pin-nuevo" class="field-input" maxlength="4" placeholder="••••">
+      </div>
+    </div>
+    <button class="btn btn-outline btn-sm" style="width:auto;margin-top:10px" onclick="changeAdminPin()">🔄 Cambiar PIN admin</button>
+
+    <div id="admin-config-msg" class="ok-msg" style="margin-top:12px"></div>
+    <div id="admin-config-err" class="err-msg" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- ════════ PANTALLA: PRÓXIMAMENTE ════════ -->
+<div class="screen" id="s-soon">
+  <div class="logo-wrap">
+    <span style="font-size:60px">🚧</span>
+    <div class="logo-title" style="font-size:40px">PRÓXIMAMENTE</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div style="font-size:48px;margin-bottom:12px" id="soon-icon">🎮</div>
+    <div style="font-family:'Bangers',cursive;font-size:26px;color:var(--gold);margin-bottom:8px" id="soon-title">Módulo en construcción</div>
+    <div style="font-size:14px;color:var(--muted);font-weight:700;line-height:1.6" id="soon-desc">Este módulo estará disponible en la siguiente fase.</div>
+    <button class="btn btn-outline" style="margin-top:20px" onclick="goBack()">← Volver</button>
+  </div>
+</div>
+
+</div><!-- .app -->
+
+<!-- ════════ MODAL: NUEVO / EDITAR ALUMNO ════════ -->
+<div class="modal-overlay" id="modal-alumno" style="display:none" onclick="closeModalIfBg(event,'modal-alumno')">
+  <div class="modal">
+    <div class="modal-title" id="modal-alumno-title">➕ Nuevo Alumno</div>
+
+    <input type="hidden" id="edit-user-id">
+
+    <div class="field-wrap">
+      <label class="field-label">Nombre completo</label>
+      <input type="text" id="form-nombre" class="field-input" placeholder="Ej: Iris García">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">PIN de acceso (4 dígitos)</label>
+      <input type="password" id="form-pin" class="field-input" maxlength="4" placeholder="••••"
+        oninput="this.value=this.value.replace(/\D/g,'')">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">📚 Curso escolar</label>
+      <select id="form-curso" class="field-input" style="cursor:pointer">
+        <option value="">— Sin especificar —</option>
+        <optgroup label="Educación Primaria">
+          <option value="P1">1º Primaria</option>
+          <option value="P2">2º Primaria</option>
+          <option value="P3">3º Primaria</option>
+          <option value="P4">4º Primaria</option>
+          <option value="P5">5º Primaria</option>
+          <option value="P6">6º Primaria</option>
+        </optgroup>
+        <optgroup label="Educación Secundaria (ESO)">
+          <option value="E1">1º ESO</option>
+          <option value="E2">2º ESO</option>
+          <option value="E3">3º ESO</option>
+          <option value="E4">4º ESO</option>
+        </optgroup>
+        <optgroup label="Bachillerato">
+          <option value="B1">1º Bachillerato</option>
+          <option value="B2">2º Bachillerato</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="toggle-wrap" onclick="togglePerm('habilitado')">
+      <div>
+        <div class="toggle-label">🟢 Alumno habilitado</div>
+        <div class="toggle-sub">Puede acceder a la plataforma</div>
+      </div>
+      <div class="toggle on" id="t-habilitado"></div>
+    </div>
+    <div class="toggle-wrap" onclick="togglePerm('crearTemas')">
+      <div>
+        <div class="toggle-label">✨ Puede crear temas</div>
+        <div class="toggle-sub">Subir apuntes y generar preguntas con IA</div>
+      </div>
+      <div class="toggle on" id="t-crearTemas"></div>
+    </div>
+
+    <div id="modal-alumno-err" class="err-msg" style="margin-top:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-gold" onclick="saveAlumno()" style="flex:1">💾 Guardar</button>
+      <button class="btn btn-outline btn-sm" onclick="closeModal('modal-alumno')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ MODAL: CONFIRMAR BORRAR ════════ -->
+<div class="modal-overlay" id="modal-confirm" style="display:none" onclick="closeModalIfBg(event,'modal-confirm')">
+  <div class="modal" style="text-align:center">
+    <div style="font-size:48px;margin-bottom:10px">⚠️</div>
+    <div class="modal-title" id="confirm-title" style="justify-content:center">¿Estás seguro?</div>
+    <div style="font-size:14px;color:var(--muted);font-weight:700;margin-bottom:20px" id="confirm-msg"></div>
+    <div class="modal-actions" style="justify-content:center">
+      <button class="btn btn-red btn-sm" id="confirm-ok-btn">Sí, eliminar</button>
+      <button class="btn btn-outline btn-sm" onclick="closeModal('modal-confirm')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="footer">by Javi Ortiz & Claude.ai</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  ESTADO GLOBAL
+// ════════════════════════════════════════════════════════════════
+let db, hashPin, firebase;
+let currentUser = null;   // { id, nombre, pin, habilitado, puedeCrearTemas, isAdmin }
+let pinBuffer   = '';
+let permsBuffer = { habilitado: true, crearTemas: true };
+
+// ════════════════════════════════════════════════════════════════
+//  INIT — esperar a que Firebase esté listo
+// ════════════════════════════════════════════════════════════════
+function onFirebaseReady(){
+  db       = window._db;
+  hashPin  = window._hashPin;
+  firebase = window._firebase;
+  initApp();
+}
+
+if(window._firebaseReady){
+  onFirebaseReady();
+} else {
+  window.addEventListener('firebaseReady', onFirebaseReady);
+  // Timeout: if Firebase fails to load (no internet / wrong config)
+  setTimeout(()=>{
+    if(!db) {
+      document.getElementById('setup-notice').style.display='block';
+      document.getElementById('login-card').style.opacity='0.4';
+      document.getElementById('login-card').style.pointerEvents='none';
+    }
+  }, 5000);
+}
+
+async function initApp(){
+  // Ensure admin config doc exists with default PIN
+  try {
+    const cfgRef = firebase.doc(db,'config','admin');
+    const cfgSnap = await firebase.getDoc(cfgRef);
+    if(!cfgSnap.exists()){
+      // First run: create default admin config
+      const defaultHash = await hashPin('2568');
+      await firebase.setDoc(cfgRef,{
+        adminPinHash: defaultHash,
+        apiKey: '',
+        createdAt: firebase.serverTimestamp()
+      });
+    }
+  } catch(e){
+    console.error('Firebase init error:', e);
+    document.getElementById('setup-notice').style.display='block';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  PIN INPUT
+// ════════════════════════════════════════════════════════════════
+function pinPress(d){
+  if(pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  updateDots();
+  if(pinBuffer.length === 4) setTimeout(checkPin, 150);
+}
+function pinDelete(){
+  pinBuffer = pinBuffer.slice(0,-1);
+  updateDots();
+}
+function pinClear(){
+  pinBuffer = '';
+  updateDots();
+  document.getElementById('pin-error').textContent = '';
+}
+function updateDots(){
+  for(let i=0;i<4;i++){
+    const dot = document.getElementById('pd'+i);
+    dot.classList.toggle('filled', i < pinBuffer.length);
+    dot.classList.remove('error');
+  }
+}
+function pinErrorAnim(){
+  for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.add('error');
+  setTimeout(()=>{ pinBuffer=''; updateDots(); },600);
+}
+
+async function checkPin(){
+  if(!db){ toast('⚠️ Firebase no conectado'); pinBuffer=''; updateDots(); return; }
+  const entered = pinBuffer;
+  const enteredHash = await hashPin(entered);
+
+  try {
+    // Check admin PIN first
+    const cfgSnap = await firebase.getDoc(firebase.doc(db,'config','admin'));
+    if(cfgSnap.exists() && cfgSnap.data().adminPinHash === enteredHash){
+      currentUser = { isAdmin:true, nombre:'Administrador' };
+      enterAdmin();
+      return;
+    }
+
+    // Check student PINs
+    const usersSnap = await firebase.getDocs(firebase.collection(db,'users'));
+    let found = null;
+    usersSnap.forEach(d => {
+      if(d.data().pinHash === enteredHash) found = { id:d.id, ...d.data() };
+    });
+
+    if(!found){
+      document.getElementById('pin-error').textContent = '❌ PIN incorrecto';
+      pinErrorAnim();
+      return;
+    }
+    if(!found.habilitado){
+      document.getElementById('pin-error').textContent = '🔒 Acceso deshabilitado. Habla con el administrador.';
+      pinErrorAnim();
+      return;
+    }
+    currentUser = found;
+    enterAlumno();
+  } catch(e){
+    console.error(e);
+    document.getElementById('pin-error').textContent = '⚠️ Error de conexión: '+e.message;
+    pinErrorAnim();
+  }
+}
+
+// Keyboard support
+document.addEventListener('keydown', e => {
+  if(document.getElementById('s-login').classList.contains('active')){
+    if(e.key >= '0' && e.key <= '9') pinPress(e.key);
+    else if(e.key === 'Backspace') pinDelete();
+    else if(e.key === 'Escape') pinClear();
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ════════════════════════════════════════════════════════════════
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  el.classList.remove('active');
+  el.offsetHeight; // force reflow
+  el.classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function enterAlumno(){
+  // Personalize greeting
+  const initial = (currentUser.nombre||'?')[0].toUpperCase();
+  document.getElementById('alumno-avatar').textContent = initial;
+  document.getElementById('alumno-name').textContent = '¡Hola, ' + currentUser.nombre + '!';
+  const cursoStr = currentUser.curso ? ' · 📚 '+cursoLabel(currentUser.curso) : '';
+  document.getElementById('alumno-status').textContent = '● Conectado' + cursoStr +
+    ' · ' + (currentUser.puedeCrearTemas ? 'Puede crear temas' : 'Solo lectura');
+
+  // Show/hide CREAR based on permission
+  const mcCrear = document.getElementById('mc-crear');
+  if(!currentUser.puedeCrearTemas) mcCrear.classList.add('disabled');
+  else mcCrear.classList.remove('disabled');
+
+  pinBuffer = '';
+  document.getElementById('pin-error').textContent = '';
+  updateDots();
+  showScreen('s-alumno');
+}
+
+async function enterAdmin(){
+  pinBuffer = '';
+  document.getElementById('pin-error').textContent = '';
+  updateDots();
+  showScreen('s-admin');
+  await loadUserList();
+  await loadAdminApiKey();
+}
+
+function logout(){
+  currentUser = null;
+  pinBuffer = '';
+  updateDots();
+  document.getElementById('pin-error').textContent = '';
+  document.getElementById('pin-hint').textContent = 'Ingresa tu PIN de acceso';
+  showScreen('s-login');
+}
+
+function goBack(){
+  if(currentUser?.isAdmin) showScreen('s-admin');
+  else if(currentUser) showScreen('s-alumno');
+  else showScreen('s-login');
+}
+
+// Alumno menu actions (stubs for future phases)
+function irACrear(){
+  if(!currentUser?.puedeCrearTemas){ toast('⚠️ No tienes permiso para crear temas'); return; }
+  showSoon('✨','Crear Tema','Aquí podrás subir tus apuntes y la IA generará 100 preguntas. ¡Disponible en la Fase 2!');
+}
+function irAAbrir(){
+  showSoon('🎮','Abrir Tema','Aquí verás todos tus temas guardados y podrás elegir con cuál jugar. ¡Disponible en la Fase 2!');
+}
+function irABorrar(){
+  showSoon('🗑️','Borrar Tema','Aquí podrás eliminar temas que ya no necesites. ¡Disponible en la Fase 2!');
+}
+function irAHistorial(){
+  showSoon('🏆','Mis Récords','Aquí verás tu historial de partidas, puntuaciones y rachas. ¡Disponible en la Fase 3!');
+}
+function showSoon(icon,title,desc){
+  document.getElementById('soon-icon').textContent = icon;
+  document.getElementById('soon-title').textContent = title;
+  document.getElementById('soon-desc').textContent = desc;
+  showScreen('s-soon');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ADMIN — USER LIST
+// ════════════════════════════════════════════════════════════════
+async function loadUserList(){
+  const list = document.getElementById('user-list');
+  list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted)"><div class="spinner"></div></div>';
+  try {
+    const snap = await firebase.getDocs(firebase.collection(db,'users'));
+    if(snap.empty){
+      list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-weight:700">No hay alumnos todavía.<br>Pulsa "+ Nuevo alumno" para añadir el primero.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    snap.forEach(d => {
+      const u = { id:d.id, ...d.data() };
+      list.appendChild(buildUserItem(u));
+    });
+  } catch(e){
+    list.innerHTML = '<div style="color:var(--red);font-weight:700;padding:12px">Error cargando alumnos: '+e.message+'</div>';
+  }
+}
+
+function buildUserItem(u){
+  const div = document.createElement('div');
+  div.className = 'user-item' + (u.habilitado?'':' disabled-user');
+  div.id = 'user-row-'+u.id;
+  const initial = (u.nombre||'?')[0].toUpperCase();
+  div.innerHTML = `
+    <div class="user-avatar">${initial}</div>
+    <div class="user-info">
+      <div class="user-name">${esc(u.nombre)}</div>
+      <div class="user-meta">
+        <span class="badge ${u.habilitado?'badge-green':'badge-red'}">${u.habilitado?'Activo':'Inactivo'}</span>
+        ${u.puedeCrearTemas?'<span class="badge badge-blue" style="margin-left:4px">Crea temas</span>':''}
+        ${u.curso?'<span class="badge" style="margin-left:4px;background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.25)">📚 '+cursoLabel(u.curso)+'</span>':''}
+      </div>
+    </div>
+    <div class="user-actions">
+      <div class="icon-btn" title="Editar" onclick="openModalEditarAlumno(${JSON.stringify(u).replace(/"/g,'&quot;')})">✏️</div>
+      <div class="icon-btn" title="Habilitar/Deshabilitar" onclick="toggleUserHabilitado('${u.id}',${!u.habilitado})">${u.habilitado?'🔒':'🔓'}</div>
+      <div class="icon-btn" title="Eliminar" onclick="confirmDeleteUser('${u.id}','${esc(u.nombre)}')">🗑️</div>
+    </div>`;
+  return div;
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function cursoLabel(c){
+  const map={
+    P1:'1º Prim',P2:'2º Prim',P3:'3º Prim',P4:'4º Prim',P5:'5º Prim',P6:'6º Prim',
+    E1:'1º ESO',E2:'2º ESO',E3:'3º ESO',E4:'4º ESO',
+    B1:'1º Bach',B2:'2º Bach'
+  };
+  return map[c]||c;
+}
+
+async function toggleUserHabilitado(userId, newState){
+  try {
+    await firebase.updateDoc(firebase.doc(db,'users',userId),{ habilitado: newState });
+    toast(newState ? '🔓 Alumno habilitado' : '🔒 Alumno deshabilitado');
+    await loadUserList();
+  } catch(e){ toast('❌ Error: '+e.message); }
+}
+
+function confirmDeleteUser(userId, nombre){
+  document.getElementById('confirm-msg').textContent = 'Se eliminará al alumno "'+nombre+'" y todos sus datos. Esta acción no se puede deshacer.';
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    closeModal('modal-confirm');
+    try {
+      await firebase.deleteDoc(firebase.doc(db,'users',userId));
+      toast('🗑️ Alumno eliminado');
+      await loadUserList();
+    } catch(e){ toast('❌ Error: '+e.message); }
+  };
+  openModal('modal-confirm');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ADMIN — MODAL NUEVO / EDITAR ALUMNO
+// ════════════════════════════════════════════════════════════════
+function openModalNuevoAlumno(){
+  document.getElementById('modal-alumno-title').textContent = '➕ Nuevo Alumno';
+  document.getElementById('edit-user-id').value = '';
+  document.getElementById('form-nombre').value = '';
+  document.getElementById('form-pin').value = '';
+  document.getElementById('form-curso').value = '';
+  permsBuffer = { habilitado:true, crearTemas:true };
+  updateToggles();
+  document.getElementById('modal-alumno-err').classList.remove('show');
+  openModal('modal-alumno');
+}
+
+function openModalEditarAlumno(u){
+  document.getElementById('modal-alumno-title').textContent = '✏️ Editar Alumno';
+  document.getElementById('edit-user-id').value = u.id;
+  document.getElementById('form-nombre').value = u.nombre||'';
+  document.getElementById('form-pin').value = '';  // blank = keep current
+  document.getElementById('form-curso').value = u.curso||'';
+  permsBuffer = { habilitado: !!u.habilitado, crearTemas: !!u.puedeCrearTemas };
+  updateToggles();
+  document.getElementById('modal-alumno-err').classList.remove('show');
+  openModal('modal-alumno');
+}
+
+function togglePerm(key){
+  permsBuffer[key] = !permsBuffer[key];
+  updateToggles();
+}
+function updateToggles(){
+  document.getElementById('t-habilitado').classList.toggle('on', permsBuffer.habilitado);
+  document.getElementById('t-crearTemas').classList.toggle('on', permsBuffer.crearTemas);
+}
+
+async function saveAlumno(){
+  const nombre = document.getElementById('form-nombre').value.trim();
+  const pin    = document.getElementById('form-pin').value.trim();
+  const userId = document.getElementById('edit-user-id').value;
+  const errEl  = document.getElementById('modal-alumno-err');
+  errEl.classList.remove('show');
+
+  if(!nombre){ errEl.textContent='⚠️ Introduce el nombre del alumno'; errEl.classList.add('show'); return; }
+
+  const isNew = !userId;
+  if(isNew && (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin))){
+    errEl.textContent='⚠️ El PIN debe tener exactamente 4 dígitos'; errEl.classList.add('show'); return;
+  }
+  if(pin && (pin.length !== 4 || !/^\d{4}$/.test(pin))){
+    errEl.textContent='⚠️ El PIN debe tener exactamente 4 dígitos'; errEl.classList.add('show'); return;
+  }
+
+  try {
+    const curso = document.getElementById('form-curso').value;
+    const data = {
+      nombre,
+      curso:           curso || '',
+      habilitado:      permsBuffer.habilitado,
+      puedeCrearTemas: permsBuffer.crearTemas,
+      updatedAt:       firebase.serverTimestamp()
+    };
+    if(pin) data.pinHash = await hashPin(pin);
+
+    if(isNew){
+      // Check PIN not already taken
+      const snap = await firebase.getDocs(firebase.collection(db,'users'));
+      const pinHash = await hashPin(pin);
+      let taken = false;
+      snap.forEach(d => { if(d.data().pinHash === pinHash) taken = true; });
+      if(taken){ errEl.textContent='⚠️ Ese PIN ya está en uso por otro alumno'; errEl.classList.add('show'); return; }
+      data.pinHash     = pinHash;
+      data.createdAt   = firebase.serverTimestamp();
+      await firebase.addDoc(firebase.collection(db,'users'), data);
+      toast('✅ Alumno creado: '+nombre);
+    } else {
+      await firebase.updateDoc(firebase.doc(db,'users',userId), data);
+      toast('✅ Alumno actualizado: '+nombre);
+    }
+    closeModal('modal-alumno');
+    await loadUserList();
+  } catch(e){
+    errEl.textContent='❌ Error: '+e.message; errEl.classList.add('show');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ADMIN — API KEY & PIN CHANGES
+// ════════════════════════════════════════════════════════════════
+function toggleApiInfo(){
+  const box = document.getElementById('api-info-box');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadAdminApiKey(){
+  try {
+    const snap = await firebase.getDoc(firebase.doc(db,'config','admin'));
+    if(snap.exists() && snap.data().apiKey){
+      document.getElementById('admin-apikey').placeholder = '••• clave guardada (editar para cambiar) •••';
+    }
+  } catch(e){}
+}
+
+async function saveApiKey(){
+  const key = document.getElementById('admin-apikey').value.trim();
+  const okEl  = document.getElementById('admin-config-msg');
+  const errEl = document.getElementById('admin-config-err');
+  okEl.classList.remove('show'); errEl.classList.remove('show');
+
+  if(!key){ errEl.textContent='⚠️ Introduce la clave API'; errEl.classList.add('show'); return; }
+  if(!key.startsWith('sk-ant-')){ errEl.textContent='⚠️ La clave debe empezar por sk-ant-'; errEl.classList.add('show'); return; }
+
+  try {
+    // Simple XOR obfuscation (not real encryption, but hides from casual view)
+    const obf = btoa(key.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^(73+i%17))).join(''));
+    await firebase.updateDoc(firebase.doc(db,'config','admin'),{ apiKey: obf });
+    document.getElementById('admin-apikey').value = '';
+    document.getElementById('admin-apikey').placeholder = '••• clave guardada (editar para cambiar) •••';
+    okEl.textContent = '✅ Clave API guardada correctamente';
+    okEl.classList.add('show');
+    setTimeout(()=>okEl.classList.remove('show'),3000);
+  } catch(e){
+    errEl.textContent='❌ Error: '+e.message; errEl.classList.add('show');
+  }
+}
+
+async function changeAdminPin(){
+  const actual = document.getElementById('admin-pin-actual').value.trim();
+  const nuevo  = document.getElementById('admin-pin-nuevo').value.trim();
+  const okEl   = document.getElementById('admin-config-msg');
+  const errEl  = document.getElementById('admin-config-err');
+  okEl.classList.remove('show'); errEl.classList.remove('show');
+
+  if(!actual||!nuevo){ errEl.textContent='⚠️ Rellena ambos campos'; errEl.classList.add('show'); return; }
+  if(!/^\d{4}$/.test(nuevo)){ errEl.textContent='⚠️ El PIN nuevo debe tener 4 dígitos'; errEl.classList.add('show'); return; }
+
+  try {
+    const snap = await firebase.getDoc(firebase.doc(db,'config','admin'));
+    const actualHash = await hashPin(actual);
+    if(snap.data().adminPinHash !== actualHash){
+      errEl.textContent='❌ El PIN actual es incorrecto'; errEl.classList.add('show'); return;
+    }
+    const nuevoHash = await hashPin(nuevo);
+    await firebase.updateDoc(firebase.doc(db,'config','admin'),{ adminPinHash: nuevoHash });
+    document.getElementById('admin-pin-actual').value='';
+    document.getElementById('admin-pin-nuevo').value='';
+    okEl.textContent='✅ PIN de administrador cambiado correctamente';
+    okEl.classList.add('show');
+    setTimeout(()=>okEl.classList.remove('show'),3000);
+  } catch(e){
+    errEl.textContent='❌ Error: '+e.message; errEl.classList.add('show');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  MODALS
+// ════════════════════════════════════════════════════════════════
+function openModal(id){ document.getElementById(id).style.display='flex'; }
+function closeModal(id){ document.getElementById(id).style.display='none'; }
+function closeModalIfBg(e,id){ if(e.target.id===id) closeModal(id); }
+
+// ════════════════════════════════════════════════════════════════
+//  TOAST
+// ════════════════════════════════════════════════════════════════
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+</script>
+</body>
+</html>

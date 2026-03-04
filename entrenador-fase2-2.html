@@ -1,0 +1,1588 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎮 Entrenador</title>
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc, query, where, addDoc, serverTimestamp }
+  from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+// ══════════════════════════════════════════════════════════════════
+//  🔧 CONFIGURACIÓN FIREBASE — Sustituye estos valores por los tuyos
+//  (los obtendrás en el Paso 2 de la guía de instalación)
+// ══════════════════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyCu0JMkzPxjcYUuEjQfvxgHrlXvR6g68b0",
+  authDomain:        "entrenador-educativo.firebaseapp.com",
+  projectId:         "entrenador-educativo",
+  storageBucket:     "entrenador-educativo.firebasestorage.app",
+  messagingSenderId: "542511476770",
+  appId:             "1:542511476770:web:daf205cd746b8f9cc29a7b"
+};
+// ══════════════════════════════════════════════════════════════════
+
+const fbApp = initializeApp(FIREBASE_CONFIG);
+const db    = getFirestore(fbApp);
+
+// ── Simple PIN hash (SHA-256 via WebCrypto) ───────────────────────
+async function hashPin(pin){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('IRIS_SALT_' + pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// ── Expose DB + helpers to window for non-module code ─────────────
+window._db = db;
+window._hashPin = hashPin;
+window._firebase = { doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc, query, where, addDoc, serverTimestamp };
+window._firebaseReady = true;
+window.dispatchEvent(new Event('firebaseReady'));
+</script>
+
+<style>
+/* ═══ RESET & ROOT ═══════════════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --gold:#FFD700;--gold2:#FFA500;--green:#00E676;--red:#FF5252;
+  --blue:#40C4FF;--purple:#E040FB;--cyan:#18FFFF;--orange:#FF9800;
+  --bg:#08081A;--card:#11112A;--card2:#181835;
+  --border:rgba(255,215,0,0.2);--text:#F0F0FF;--muted:#7777AA;
+}
+html,body{height:100%;overflow-x:hidden}
+body{
+  font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;
+  background-image:
+    radial-gradient(ellipse at 20% 20%,rgba(224,64,251,0.1) 0%,transparent 50%),
+    radial-gradient(ellipse at 80% 80%,rgba(64,196,255,0.08) 0%,transparent 50%);
+}
+body::after{
+  content:'';position:fixed;inset:0;
+  background-image:radial-gradient(rgba(255,215,0,0.05) 1px,transparent 1px);
+  background-size:36px 36px;pointer-events:none;z-index:0;
+}
+
+/* ═══ LAYOUT ════════════════════════════════════════════════════ */
+.app{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px 16px 40px}
+.screen{display:none;width:100%;max-width:680px;flex-direction:column;align-items:center;gap:18px}
+.screen.active{display:flex;animation:fadeUp .4s cubic-bezier(.22,1,.36,1) forwards}
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:none}}
+
+/* ═══ LOGO ══════════════════════════════════════════════════════ */
+.logo-wrap{text-align:center;padding:8px 0}
+.logo-emoji{font-size:58px;display:block;animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1) rotate(-2deg)}50%{transform:scale(1.07) rotate(2deg)}}
+.logo-title{
+  font-family:'Bangers',cursive;font-size:clamp(36px,9vw,64px);
+  letter-spacing:3px;line-height:1;
+  background:linear-gradient(135deg,#FFD700,#FF8C00 40%,#FF5252 70%,#E040FB);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  filter:drop-shadow(0 0 10px rgba(255,215,0,.35));
+}
+.logo-sub{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:2.5px;text-transform:uppercase;margin-top:4px}
+
+/* ═══ CARDS ═════════════════════════════════════════════════════ */
+.card{
+  background:var(--card);border:2px solid var(--border);
+  border-radius:22px;padding:28px;width:100%;
+  box-shadow:0 16px 48px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);
+}
+.card-title{
+  font-family:'Bangers',cursive;font-size:22px;letter-spacing:1.5px;
+  color:var(--gold);margin-bottom:16px;display:flex;align-items:center;gap:10px;
+}
+
+/* ═══ PIN INPUT ═════════════════════════════════════════════════ */
+.pin-wrap{display:flex;flex-direction:column;align-items:center;gap:16px;width:100%}
+.pin-dots{display:flex;gap:14px;margin:8px 0}
+.pin-dot{
+  width:18px;height:18px;border-radius:50%;
+  border:2px solid rgba(255,215,0,.4);background:transparent;
+  transition:all .2s;
+}
+.pin-dot.filled{background:var(--gold);border-color:var(--gold);box-shadow:0 0 10px rgba(255,215,0,.5)}
+.pin-dot.error{background:var(--red);border-color:var(--red);animation:shake .35s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:280px}
+.pin-btn{
+  background:var(--card2);border:2px solid rgba(255,255,255,.08);
+  border-radius:14px;padding:18px;font-family:'Bangers',cursive;
+  font-size:26px;color:var(--text);cursor:pointer;transition:all .15s;
+  text-align:center;
+}
+.pin-btn:hover{border-color:var(--gold);background:rgba(255,215,0,.08);transform:scale(1.04)}
+.pin-btn:active{transform:scale(.96)}
+.pin-btn.del{font-size:20px;color:var(--muted)}
+.pin-btn.del:hover{color:var(--red);border-color:var(--red)}
+.pin-hint{font-size:13px;color:var(--muted);font-weight:700;text-align:center}
+.pin-error{font-size:13px;color:var(--red);font-weight:800;min-height:18px;text-align:center}
+
+/* ═══ BUTTONS ════════════════════════════════════════════════════ */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:13px 28px;border-radius:50px;border:none;cursor:pointer;
+  font-family:'Bangers',cursive;font-size:19px;letter-spacing:1.5px;
+  transition:all .2s;text-transform:uppercase;width:100%;
+}
+.btn-gold{background:linear-gradient(135deg,#FFD700,#FF8C00);color:#1A0A00;box-shadow:0 6px 20px rgba(255,165,0,.4)}
+.btn-gold:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 28px rgba(255,165,0,.55)}
+.btn-green{background:linear-gradient(135deg,#00E676,#00B248);color:#001A08;box-shadow:0 5px 18px rgba(0,230,118,.3)}
+.btn-green:hover:not(:disabled){transform:translateY(-2px)}
+.btn-red{background:linear-gradient(135deg,#FF5252,#C62828);color:white;box-shadow:0 5px 18px rgba(255,82,82,.3)}
+.btn-red:hover:not(:disabled){transform:translateY(-2px)}
+.btn-blue{background:linear-gradient(135deg,#40C4FF,#0091EA);color:#001A2A;box-shadow:0 5px 18px rgba(64,196,255,.3)}
+.btn-blue:hover:not(:disabled){transform:translateY(-2px)}
+.btn-outline{background:transparent;border:2px solid var(--border);color:var(--muted);font-family:'Bangers',cursive;font-size:17px;letter-spacing:1px}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold)}
+.btn-sm{padding:9px 20px;font-size:16px;width:auto}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+
+/* ═══ MENU GRID ══════════════════════════════════════════════════ */
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%}
+@media(max-width:420px){.menu-grid{grid-template-columns:1fr}}
+.menu-card{
+  background:var(--card2);border:2px solid var(--border);border-radius:18px;
+  padding:22px 16px;text-align:center;cursor:pointer;transition:all .22s;
+}
+.menu-card:hover{border-color:var(--gold);transform:translateY(-3px);box-shadow:0 8px 24px rgba(255,215,0,.15)}
+.menu-card:active{transform:scale(.97)}
+.menu-card.disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+.mc-icon{font-size:34px;margin-bottom:8px}
+.mc-title{font-family:'Bangers',cursive;font-size:19px;letter-spacing:1px;color:var(--gold);margin-bottom:4px}
+.mc-desc{font-size:12px;color:var(--muted);font-weight:700;line-height:1.4}
+
+/* ═══ GREETING ═══════════════════════════════════════════════════ */
+.greeting{
+  background:linear-gradient(135deg,rgba(255,215,0,.08),rgba(255,165,0,.04));
+  border:2px solid rgba(255,215,0,.25);border-radius:16px;
+  padding:16px 20px;width:100%;display:flex;align-items:center;gap:14px;
+}
+.greeting-avatar{
+  width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(135deg,var(--purple),var(--blue));
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;flex-shrink:0;
+}
+.greeting-name{font-family:'Bangers',cursive;font-size:22px;letter-spacing:1px;color:var(--gold)}
+.greeting-status{font-size:12px;color:var(--green);font-weight:700;margin-top:2px}
+
+/* ═══ ADMIN PANEL ════════════════════════════════════════════════ */
+.section-title{
+  font-family:'Bangers',cursive;font-size:18px;letter-spacing:1px;
+  color:var(--cyan);margin-bottom:12px;display:flex;align-items:center;gap:8px;
+  padding-bottom:8px;border-bottom:1px solid var(--border);width:100%;
+}
+.user-list{width:100%;display:flex;flex-direction:column;gap:8px}
+.user-item{
+  background:var(--card2);border:1px solid var(--border);border-radius:12px;
+  padding:12px 16px;display:flex;align-items:center;gap:12px;
+}
+.user-item.disabled-user{opacity:.55}
+.user-avatar{
+  width:38px;height:38px;border-radius:50%;
+  background:linear-gradient(135deg,var(--purple),var(--blue));
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;flex-shrink:0;font-weight:900;color:white;
+  font-family:'Nunito',sans-serif;
+}
+.user-info{flex:1;min-width:0}
+.user-name{font-weight:800;font-size:14px;color:var(--text)}
+.user-meta{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px}
+.user-actions{display:flex;gap:6px}
+.icon-btn{
+  width:32px;height:32px;border-radius:8px;border:1px solid var(--border);
+  background:rgba(255,255,255,.04);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;font-size:14px;transition:all .15s;
+}
+.icon-btn:hover{border-color:var(--gold);background:rgba(255,215,0,.08)}
+.badge{
+  display:inline-flex;align-items:center;padding:2px 8px;border-radius:50px;
+  font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;
+}
+.badge-green{background:rgba(0,230,118,.15);color:var(--green);border:1px solid rgba(0,230,118,.3)}
+.badge-red{background:rgba(255,82,82,.12);color:var(--red);border:1px solid rgba(255,82,82,.25)}
+.badge-blue{background:rgba(64,196,255,.12);color:var(--blue);border:1px solid rgba(64,196,255,.25)}
+
+/* ═══ FORM FIELDS ════════════════════════════════════════════════ */
+.field-wrap{width:100%;margin-bottom:12px}
+.field-label{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px;display:block}
+.field-input{
+  width:100%;background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.1);
+  border-radius:11px;padding:12px 14px;color:var(--text);font-size:14px;
+  font-family:'Nunito',sans-serif;outline:none;transition:border-color .25s;
+}
+.field-input:focus{border-color:var(--blue)}
+.field-row{display:flex;gap:10px;width:100%}
+.toggle-wrap{display:flex;align-items:center;justify-content:space-between;
+  background:var(--card2);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;margin-bottom:8px;cursor:pointer;transition:border-color .2s}
+.toggle-wrap:hover{border-color:var(--gold)}
+.toggle-label{font-size:13px;font-weight:700;color:var(--text)}
+.toggle-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.toggle{width:42px;height:24px;border-radius:12px;background:rgba(255,255,255,.1);
+  position:relative;transition:background .25s;flex-shrink:0;cursor:pointer}
+.toggle.on{background:var(--green)}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;
+  border-radius:50%;background:white;transition:transform .25s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.toggle.on::after{transform:translateX(18px)}
+
+/* ═══ MODAL ═════════════════════════════════════════════════════ */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(6px);
+  z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;
+  animation:fadeIn .25s ease;
+}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{
+  background:var(--card);border:2px solid var(--border);border-radius:22px;
+  padding:28px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;
+  animation:slideUp .3s cubic-bezier(.22,1,.36,1);
+}
+@keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.modal-title{font-family:'Bangers',cursive;font-size:22px;letter-spacing:1px;color:var(--gold);margin-bottom:20px}
+.modal-actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+
+/* ═══ SEPARATOR & MISC ═══════════════════════════════════════════ */
+.sep{width:100%;height:1px;background:var(--border);margin:4px 0}
+.tip{background:rgba(64,196,255,.07);border:1px solid rgba(64,196,255,.2);
+  border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;
+  color:#90E0FF;line-height:1.5;width:100%}
+.warn-msg{background:rgba(255,152,0,.08);border:2px solid rgba(255,152,0,.3);
+  border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;
+  color:#FFD580;white-space:pre-line;display:none}
+.warn-msg.show{display:block;animation:fadeUp .3s ease}
+.err-msg{background:rgba(255,82,82,.08);border:2px solid rgba(255,82,82,.3);
+  border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;
+  color:#FFA0A0;white-space:pre-line;display:none}
+.err-msg.show{display:block;animation:fadeUp .3s ease}
+.ok-msg{background:rgba(0,230,118,.08);border:2px solid rgba(0,230,118,.25);
+  border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;
+  color:#6EF7A7;display:none}
+.ok-msg.show{display:block;animation:fadeUp .3s ease}
+
+/* ═══ LOADING ════════════════════════════════════════════════════ */
+.spinner{width:48px;height:48px;border-radius:50%;margin:0 auto 12px;
+  border:4px solid rgba(255,215,0,.12);border-top-color:var(--gold);
+  animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+
+/* ═══ STEPS BAR ════════════════════════════════════════════════ */
+.steps-bar{display:flex;align-items:center;justify-content:center;width:100%;padding:4px 0}
+.step{display:flex;flex-direction:column;align-items:center;gap:4px}
+.step span{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.08);
+  border:2px solid rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;
+  font-family:'Bangers',cursive;font-size:16px;color:var(--muted);transition:all .3s}
+.step.active span{background:var(--gold);border-color:var(--gold);color:#1A0A00}
+.step.done span{background:var(--green);border-color:var(--green);color:#001A08}
+.step-lbl{font-size:10px;font-weight:800;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.step.active .step-lbl{color:var(--gold)} .step.done .step-lbl{color:var(--green)}
+.step-line{flex:1;height:2px;background:rgba(255,255,255,.08);min-width:40px;max-width:80px;margin-bottom:14px}
+/* ═══ EMOJI PICKER ════════════════════════════════════════════ */
+.emoji-grid{display:flex;flex-wrap:wrap;gap:8px}
+.emoji-opt{font-size:24px;cursor:pointer;padding:6px;border-radius:10px;
+  border:2px solid transparent;transition:all .2s;background:rgba(255,255,255,.04)}
+.emoji-opt:hover{border-color:var(--gold);background:rgba(255,215,0,.1)}
+.emoji-opt.selected{border-color:var(--gold);background:rgba(255,215,0,.15)}
+/* ═══ UPLOAD ZONE ═════════════════════════════════════════════ */
+.upload-zone{width:100%;border:2px dashed rgba(64,196,255,.35);border-radius:16px;
+  padding:24px;text-align:center;cursor:pointer;transition:all .3s;
+  background:rgba(64,196,255,.04);display:block}
+.upload-zone:hover{border-color:var(--blue);background:rgba(64,196,255,.1)}
+.uz-icon{font-size:32px;margin-bottom:6px}
+.uz-title{font-size:15px;font-weight:800;color:var(--blue);margin-bottom:4px}
+.uz-hint{font-size:12px;color:var(--muted)}
+.uz-status{font-size:13px;color:var(--green);font-weight:800;margin-top:8px;min-height:18px}
+/* ═══ GEN STEPS ═══════════════════════════════════════════════ */
+.gstep{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13px;
+  font-weight:700;color:var(--muted);transition:color .5s}
+.gstep.active{color:#C4B5FD} .gstep.done{color:var(--green)}
+.gstep-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.1);
+  flex-shrink:0;transition:background .5s}
+.gstep.active .gstep-dot{background:#7C3AED;animation:pulseDot 1s infinite}
+.gstep.done .gstep-dot{background:var(--green)}
+@keyframes pulseDot{0%,100%{transform:scale(1)}50%{transform:scale(1.6);opacity:.6}}
+/* ═══ TEMA CARDS ══════════════════════════════════════════════ */
+.tema-item{background:var(--card2);border:2px solid var(--border);border-radius:14px;
+  padding:14px 16px;display:flex;align-items:center;gap:12px;
+  transition:border-color .2s;margin-bottom:8px}
+.tema-item:hover{border-color:rgba(255,215,0,.4)}
+.tema-emoji{font-size:28px;flex-shrink:0}
+.tema-info{flex:1;min-width:0}
+.tema-nombre{font-weight:800;font-size:15px;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tema-meta{font-size:11px;color:var(--muted);font-weight:700;margin-top:3px}
+.tema-actions{display:flex;gap:6px;flex-shrink:0}
+
+/* ═══ FOOTER ════════════════════════════════════════════════════ */
+.footer{
+  position:fixed;bottom:10px;right:14px;
+  font-size:10px;color:rgba(255,255,255,.18);font-weight:700;
+  letter-spacing:.5px;z-index:10;pointer-events:none;
+}
+
+/* ═══ TOAST ═════════════════════════════════════════════════════ */
+.toast{
+  position:fixed;bottom:28px;left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:var(--card2);border:2px solid var(--gold);border-radius:50px;
+  padding:10px 24px;font-family:'Bangers',cursive;font-size:17px;letter-spacing:1px;
+  color:var(--gold);box-shadow:0 8px 32px rgba(0,0,0,.5);
+  transition:transform .3s cubic-bezier(.22,1,.36,1);z-index:1000;white-space:nowrap;
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ═══ FIREBASE SETUP NOTICE ══════════════════════════════════════ */
+.setup-notice{
+  background:rgba(255,152,0,.08);border:2px solid rgba(255,152,0,.35);
+  border-radius:16px;padding:18px;width:100%;
+}
+.setup-notice h3{font-family:'Bangers',cursive;font-size:20px;color:var(--orange);margin-bottom:10px}
+.setup-notice p{font-size:13px;color:#FFD580;font-weight:700;line-height:1.7}
+.setup-notice code{background:rgba(0,0,0,.3);padding:2px 7px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ════════ PANTALLA: BIENVENIDA / LOGIN ════════ -->
+<div class="screen active" id="s-login">
+  <div class="logo-wrap">
+    <span class="logo-emoji">🎮</span>
+    <div class="logo-title">ENTRENADOR</div>
+    <div class="logo-sub">⚡ Sistema de Estudio Inteligente ⚡</div>
+  </div>
+
+  <div class="card" id="login-card">
+    <div class="card-title">🔐 Introduce tu PIN</div>
+    <div class="pin-wrap">
+      <div class="pin-dots" id="pin-dots">
+        <div class="pin-dot" id="pd0"></div>
+        <div class="pin-dot" id="pd1"></div>
+        <div class="pin-dot" id="pd2"></div>
+        <div class="pin-dot" id="pd3"></div>
+      </div>
+      <div class="pin-error" id="pin-error"></div>
+      <div class="pin-pad" id="pin-pad">
+        <button class="pin-btn" onclick="pinPress('1')">1</button>
+        <button class="pin-btn" onclick="pinPress('2')">2</button>
+        <button class="pin-btn" onclick="pinPress('3')">3</button>
+        <button class="pin-btn" onclick="pinPress('4')">4</button>
+        <button class="pin-btn" onclick="pinPress('5')">5</button>
+        <button class="pin-btn" onclick="pinPress('6')">6</button>
+        <button class="pin-btn" onclick="pinPress('7')">7</button>
+        <button class="pin-btn" onclick="pinPress('8')">8</button>
+        <button class="pin-btn" onclick="pinPress('9')">9</button>
+        <button class="pin-btn" onclick="pinClear()" style="font-size:14px;color:var(--muted)">CLR</button>
+        <button class="pin-btn" onclick="pinPress('0')">0</button>
+        <button class="pin-btn del" onclick="pinDelete()">⌫</button>
+      </div>
+      <div class="pin-hint" id="pin-hint">Ingresa tu PIN de acceso</div>
+    </div>
+  </div>
+
+  <!-- Firebase not configured notice -->
+  <div class="setup-notice" id="setup-notice" style="display:none">
+    <h3>⚙️ Firebase no configurado</h3>
+    <p>Para usar la app necesitas conectar Firebase.<br>
+    Edita el archivo HTML y sustituye los valores en<br>
+    <code>FIREBASE_CONFIG</code> con los de tu proyecto.<br><br>
+    📖 Sigue la guía de instalación incluida abajo.</p>
+  </div>
+</div>
+
+<!-- ════════ PANTALLA: PANEL ALUMNO ════════ -->
+<div class="screen" id="s-alumno">
+  <div class="logo-wrap" style="padding-bottom:0">
+    <div class="logo-title" style="font-size:clamp(28px,7vw,48px)">ENTRENADOR</div>
+  </div>
+
+  <div class="greeting" id="alumno-greeting">
+    <div class="greeting-avatar" id="alumno-avatar">🌟</div>
+    <div>
+      <div class="greeting-name" id="alumno-name">¡Hola!</div>
+      <div class="greeting-status" id="alumno-status">● Conectado</div>
+    </div>
+    <button class="btn btn-outline btn-sm" style="width:auto;margin-left:auto" onclick="logout()">Salir</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📚 ¿Qué hacemos hoy?</div>
+    <div class="menu-grid" id="alumno-menu">
+      <div class="menu-card" id="mc-crear" onclick="irACrear()">
+        <div class="mc-icon">✨</div>
+        <div class="mc-title">CREAR TEMA</div>
+        <div class="mc-desc">Subir apuntes y generar preguntas con IA</div>
+      </div>
+      <div class="menu-card" onclick="irAAbrir()">
+        <div class="mc-icon">🎮</div>
+        <div class="mc-title">ABRIR TEMA</div>
+        <div class="mc-desc">Elegir un tema guardado y jugar</div>
+      </div>
+      <div class="menu-card" onclick="irABorrar()">
+        <div class="mc-icon">🗑️</div>
+        <div class="mc-title">BORRAR TEMA</div>
+        <div class="mc-desc">Eliminar un tema que ya no necesitas</div>
+      </div>
+      <div class="menu-card" id="mc-historial" onclick="irAHistorial()">
+        <div class="mc-icon">🏆</div>
+        <div class="mc-title">MIS RÉCORDS</div>
+        <div class="mc-desc">Ver tu historial de partidas y puntuaciones</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ PANTALLA: PANEL ADMIN ════════ -->
+<div class="screen" id="s-admin">
+  <div class="logo-wrap" style="padding-bottom:0">
+    <div class="logo-title" style="font-size:clamp(26px,6vw,44px)">ENTRENADOR</div>
+  </div>
+
+  <div class="greeting" style="background:rgba(224,64,251,.07);border-color:rgba(224,64,251,.3)">
+    <div class="greeting-avatar" style="background:linear-gradient(135deg,#E040FB,#FF5252)">👑</div>
+    <div>
+      <div class="greeting-name" style="color:var(--purple)">Panel Administrador</div>
+      <div class="greeting-status" style="color:var(--purple)">● Acceso total</div>
+    </div>
+    <button class="btn btn-outline btn-sm" style="width:auto;margin-left:auto" onclick="logout()">Salir</button>
+  </div>
+
+  <!-- Gestión de alumnos -->
+  <div class="card">
+    <div class="card-title">👥 Alumnos</div>
+    <div class="user-list" id="user-list">
+      <div style="text-align:center;padding:20px;color:var(--muted)">
+        <div class="spinner"></div>
+        Cargando alumnos…
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <button class="btn btn-green" onclick="openModalNuevoAlumno()">➕ Nuevo alumno</button>
+    </div>
+  </div>
+
+  <!-- Configuración global -->
+  <div class="card">
+    <div class="card-title">⚙️ Configuración</div>
+
+    <div class="section-title">🔑 API Key Anthropic (IA)</div>
+    <div style="background:rgba(64,196,255,.06);border:1px solid rgba(64,196,255,.2);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:700;color:#90E0FF;line-height:1.6">
+          Necesitas una clave API de Anthropic para que la IA genere preguntas.<br>
+          Si cambias la clave, simplemente pega la nueva y pulsa Guardar.
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="toggleApiInfo()" style="white-space:nowrap;font-size:13px;padding:6px 14px">ℹ️ ¿Cómo obtenerla?</button>
+      </div>
+      <div id="api-info-box" style="display:none;background:rgba(0,0,0,.25);border-radius:10px;padding:14px;margin-bottom:10px;font-size:12px;font-weight:700;color:#C4E8FF;line-height:1.8">
+        <div style="font-family:'Bangers',cursive;font-size:16px;color:var(--cyan);margin-bottom:8px;letter-spacing:1px">📋 PASOS PARA OBTENER TU CLAVE API</div>
+        <div>1️⃣ Ve a <a href="https://platform.claude.com/settings/keys" target="_blank" style="color:var(--gold);font-weight:800">platform.claude.com/settings/keys</a></div>
+        <div>2️⃣ Inicia sesión con tu cuenta de Anthropic (o crea una)</div>
+        <div>3️⃣ Añade un método de pago en <strong>Billing</strong> y carga mínimo $5</div>
+        <div>4️⃣ Ve a <strong>API Keys</strong> → pulsa <strong>"Create Key"</strong></div>
+        <div>5️⃣ Ponle un nombre (ej: "Entrenador") y copia la clave completa</div>
+        <div>6️⃣ Pégala aquí abajo y pulsa <strong>Guardar</strong></div>
+        <div style="margin-top:8px;padding:8px;background:rgba(255,215,0,.08);border-radius:8px;color:var(--gold)">
+          💰 Coste aproximado: 2-5 céntimos por tema generado (100 preguntas)
+        </div>
+      </div>
+      <a href="https://platform.claude.com/settings/keys" target="_blank"
+        style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--gold);text-decoration:none;margin-bottom:10px">
+        🔗 Ir directamente a mis claves API →
+      </a>
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">Pega tu clave API aquí</label>
+      <input type="password" id="admin-apikey" class="field-input" placeholder="sk-ant-api03-...">
+    </div>
+    <button class="btn btn-blue btn-sm" style="width:auto;margin-bottom:20px" onclick="saveApiKey()">💾 Guardar clave API</button>
+
+    <div class="section-title">🔐 PIN de administrador</div>
+    <div class="field-row">
+      <div class="field-wrap" style="margin-bottom:0">
+        <label class="field-label">PIN actual</label>
+        <input type="password" id="admin-pin-actual" class="field-input" maxlength="4" placeholder="••••">
+      </div>
+      <div class="field-wrap" style="margin-bottom:0">
+        <label class="field-label">PIN nuevo</label>
+        <input type="password" id="admin-pin-nuevo" class="field-input" maxlength="4" placeholder="••••">
+      </div>
+    </div>
+    <button class="btn btn-outline btn-sm" style="width:auto;margin-top:10px" onclick="changeAdminPin()">🔄 Cambiar PIN admin</button>
+
+    <div id="admin-config-msg" class="ok-msg" style="margin-top:12px"></div>
+    <div id="admin-config-err" class="err-msg" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- ════════ PANTALLA: PRÓXIMAMENTE ════════ -->
+<div class="screen" id="s-soon">
+  <div class="logo-wrap">
+    <span style="font-size:60px">🚧</span>
+    <div class="logo-title" style="font-size:40px">PRÓXIMAMENTE</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div style="font-size:48px;margin-bottom:12px" id="soon-icon">🎮</div>
+    <div style="font-family:'Bangers',cursive;font-size:26px;color:var(--gold);margin-bottom:8px" id="soon-title">Módulo en construcción</div>
+    <div style="font-size:14px;color:var(--muted);font-weight:700;line-height:1.6" id="soon-desc">Este módulo estará disponible en la siguiente fase.</div>
+    <button class="btn btn-outline" style="margin-top:20px" onclick="goBack()">← Volver</button>
+  </div>
+</div>
+
+
+<!-- ════════ PANTALLA: CREAR TEMA ════════ -->
+<div class="screen" id="s-crear">
+  <div class="logo-wrap" style="padding-bottom:0">
+    <div class="logo-title" style="font-size:clamp(24px,6vw,40px)">✨ CREAR TEMA</div>
+    <div class="logo-sub">Sube tus apuntes · La IA genera 100 preguntas</div>
+  </div>
+  <div class="steps-bar">
+    <div class="step active" id="step1-dot"><span>1</span><div class="step-lbl">Nombre</div></div>
+    <div class="step-line"></div>
+    <div class="step" id="step2-dot"><span>2</span><div class="step-lbl">Fotos</div></div>
+    <div class="step-line"></div>
+    <div class="step" id="step3-dot"><span>3</span><div class="step-lbl">Generar</div></div>
+  </div>
+  <!-- STEP 1 -->
+  <div class="card" id="crear-step1">
+    <div class="card-title">🏷️ Nombre del tema</div>
+    <div class="field-wrap">
+      <label class="field-label">¿Cómo se llama este tema?</label>
+      <input type="text" id="tema-nombre" class="field-input" placeholder="Ej: Tema 3 · La célula" maxlength="60">
+    </div>
+    <div class="field-wrap">
+      <div class="field-label" style="margin-bottom:8px">Elige un icono</div>
+      <div class="emoji-grid">
+        <span class="emoji-opt selected" onclick="pickEmoji('📖',this)">📖</span>
+        <span class="emoji-opt" onclick="pickEmoji('🔬',this)">🔬</span>
+        <span class="emoji-opt" onclick="pickEmoji('🧪',this)">🧪</span>
+        <span class="emoji-opt" onclick="pickEmoji('🌍',this)">🌍</span>
+        <span class="emoji-opt" onclick="pickEmoji('📐',this)">📐</span>
+        <span class="emoji-opt" onclick="pickEmoji('🔢',this)">🔢</span>
+        <span class="emoji-opt" onclick="pickEmoji('🏛️',this)">🏛️</span>
+        <span class="emoji-opt" onclick="pickEmoji('🎵',this)">🎵</span>
+        <span class="emoji-opt" onclick="pickEmoji('🎨',this)">🎨</span>
+        <span class="emoji-opt" onclick="pickEmoji('💻',this)">💻</span>
+        <span class="emoji-opt" onclick="pickEmoji('🌿',this)">🌿</span>
+        <span class="emoji-opt" onclick="pickEmoji('⚡',this)">⚡</span>
+        <span class="emoji-opt" onclick="pickEmoji('🧬',this)">🧬</span>
+        <span class="emoji-opt" onclick="pickEmoji('📝',this)">📝</span>
+        <span class="emoji-opt" onclick="pickEmoji('🌟',this)">🌟</span>
+        <span class="emoji-opt" onclick="pickEmoji('🗺️',this)">🗺️</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn btn-outline" onclick="goBack()">← Volver</button>
+      <button class="btn btn-gold" onclick="crearStep2()">Siguiente →</button>
+    </div>
+  </div>
+  <!-- STEP 2 -->
+  <div class="card" id="crear-step2" style="display:none">
+    <div class="card-title">📸 Sube tus apuntes</div>
+    <label class="upload-zone" for="file-input-crear">
+      <input type="file" id="file-input-crear" accept="image/*,.heic,.heif,.pdf,application/pdf"
+        multiple onchange="onFilesCrear(event)" style="display:none">
+      <div class="uz-icon">📸</div>
+      <div class="uz-title">Arrastra aquí o toca para elegir</div>
+      <div class="uz-hint">JPG · PNG · WEBP · HEIC (iPhone) · PDF · Hasta 25 páginas</div>
+      <div class="uz-status" id="uz-status-crear"></div>
+    </label>
+    <div class="tip" style="margin-top:10px">
+      💡 <strong>Consejo:</strong> Fotos claras del cuaderno, libro o pizarra.
+      Las imágenes se comprimen automáticamente antes de enviarlas a la IA.
+    </div>
+    <div id="crear-step2-warn" class="warn-msg" style="margin-top:10px"></div>
+    <div id="crear-step2-err" class="err-msg" style="margin-top:6px"></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-outline" onclick="backToStep1()">← Volver</button>
+      <button class="btn btn-gold" onclick="crearStep3()">✨ Generar preguntas</button>
+    </div>
+  </div>
+  <!-- STEP 3 -->
+  <div class="card" id="crear-step3" style="display:none;text-align:center;padding:36px 24px">
+    <div class="spinner" style="width:64px;height:64px;border-width:5px;margin-bottom:16px"></div>
+    <div style="font-family:'Bangers',cursive;font-size:26px;letter-spacing:2px;color:var(--gold)" id="gen-title">GENERANDO PREGUNTAS…</div>
+    <div style="font-size:13px;color:var(--muted);font-weight:700;margin-top:8px" id="gen-sub">La IA está leyendo tus apuntes 🤓</div>
+    <ul style="list-style:none;margin-top:20px;text-align:left;display:inline-block" id="gen-steps-list">
+      <li class="gstep active" id="gstep-1"><div class="gstep-dot"></div>Procesando imágenes</li>
+      <li class="gstep" id="gstep-2"><div class="gstep-dot"></div>Analizando contenido con IA</li>
+      <li class="gstep" id="gstep-3"><div class="gstep-dot"></div>Generando 100 preguntas</li>
+      <li class="gstep" id="gstep-4"><div class="gstep-dot"></div>Guardando en tu biblioteca</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════ PANTALLA: MIS TEMAS ════════ -->
+<div class="screen" id="s-temas">
+  <div class="logo-wrap" style="padding-bottom:0">
+    <div class="logo-title" id="temas-screen-title" style="font-size:clamp(24px,6vw,40px)">📚 MIS TEMAS</div>
+  </div>
+  <div class="card">
+    <div id="temas-list">
+      <div style="text-align:center;padding:20px;color:var(--muted)"><div class="spinner"></div>Cargando…</div>
+    </div>
+    <button class="btn btn-outline" style="margin-top:14px" onclick="goBack()">← Volver</button>
+  </div>
+</div>
+
+<!-- ════════ PANTALLA: JUEGO (placeholder Fase 3) ════════ -->
+<div class="screen" id="s-juego">
+  <div class="card" style="text-align:center;padding:36px">
+    <div style="font-size:56px;margin-bottom:12px">🎮</div>
+    <div style="font-family:'Bangers',cursive;font-size:28px;color:var(--gold);margin-bottom:8px" id="juego-tema-label">¡A JUGAR!</div>
+    <div style="font-size:14px;color:var(--muted);font-weight:700;margin-bottom:20px" id="juego-preg-count"></div>
+    <div style="font-size:13px;color:#A0C4FF;font-weight:700;line-height:1.7;margin-bottom:20px">
+      🚧 El tablero de juego completo llegará en la <strong>Fase 3</strong>.<br>
+      Las preguntas ya están guardadas y listas.
+    </div>
+    <button class="btn btn-outline" onclick="goBack()">← Volver</button>
+  </div>
+</div>
+
+</div><!-- .app -->
+
+<!-- ════════ MODAL: NUEVO / EDITAR ALUMNO ════════ -->
+<div class="modal-overlay" id="modal-alumno" style="display:none" onclick="closeModalIfBg(event,'modal-alumno')">
+  <div class="modal">
+    <div class="modal-title" id="modal-alumno-title">➕ Nuevo Alumno</div>
+
+    <input type="hidden" id="edit-user-id">
+
+    <div class="field-wrap">
+      <label class="field-label">Nombre completo</label>
+      <input type="text" id="form-nombre" class="field-input" placeholder="Ej: Iris García">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">PIN de acceso (4 dígitos)</label>
+      <input type="password" id="form-pin" class="field-input" maxlength="4" placeholder="••••"
+        oninput="this.value=this.value.replace(/\D/g,'')">
+    </div>
+    <div class="field-wrap">
+      <label class="field-label">📚 Curso escolar</label>
+      <select id="form-curso" class="field-input" style="cursor:pointer">
+        <option value="">— Sin especificar —</option>
+        <optgroup label="Educación Primaria">
+          <option value="P1">1º Primaria</option>
+          <option value="P2">2º Primaria</option>
+          <option value="P3">3º Primaria</option>
+          <option value="P4">4º Primaria</option>
+          <option value="P5">5º Primaria</option>
+          <option value="P6">6º Primaria</option>
+        </optgroup>
+        <optgroup label="Educación Secundaria (ESO)">
+          <option value="E1">1º ESO</option>
+          <option value="E2">2º ESO</option>
+          <option value="E3">3º ESO</option>
+          <option value="E4">4º ESO</option>
+        </optgroup>
+        <optgroup label="Bachillerato">
+          <option value="B1">1º Bachillerato</option>
+          <option value="B2">2º Bachillerato</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="toggle-wrap" onclick="togglePerm('habilitado')">
+      <div>
+        <div class="toggle-label">🟢 Alumno habilitado</div>
+        <div class="toggle-sub">Puede acceder a la plataforma</div>
+      </div>
+      <div class="toggle on" id="t-habilitado"></div>
+    </div>
+    <div class="toggle-wrap" onclick="togglePerm('crearTemas')">
+      <div>
+        <div class="toggle-label">✨ Puede crear temas</div>
+        <div class="toggle-sub">Subir apuntes y generar preguntas con IA</div>
+      </div>
+      <div class="toggle on" id="t-crearTemas"></div>
+    </div>
+
+    <div id="modal-alumno-err" class="err-msg" style="margin-top:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-gold" onclick="saveAlumno()" style="flex:1">💾 Guardar</button>
+      <button class="btn btn-outline btn-sm" onclick="closeModal('modal-alumno')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ MODAL: CONFIRMAR BORRAR ════════ -->
+<div class="modal-overlay" id="modal-confirm" style="display:none" onclick="closeModalIfBg(event,'modal-confirm')">
+  <div class="modal" style="text-align:center">
+    <div style="font-size:48px;margin-bottom:10px">⚠️</div>
+    <div class="modal-title" id="confirm-title" style="justify-content:center">¿Estás seguro?</div>
+    <div style="font-size:14px;color:var(--muted);font-weight:700;margin-bottom:20px" id="confirm-msg"></div>
+    <div class="modal-actions" style="justify-content:center">
+      <button class="btn btn-red btn-sm" id="confirm-ok-btn">Sí, eliminar</button>
+      <button class="btn btn-outline btn-sm" onclick="closeModal('modal-confirm')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="footer">by Javi Ortiz & Claude.ai</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  ESTADO GLOBAL
+// ════════════════════════════════════════════════════════════════
+let db, hashPin, firebase;
+let currentUser = null;   // { id, nombre, pin, habilitado, puedeCrearTemas, isAdmin }
+let pinBuffer   = '';
+let permsBuffer = { habilitado: true, crearTemas: true };
+
+// ════════════════════════════════════════════════════════════════
+//  INIT — esperar a que Firebase esté listo
+// ════════════════════════════════════════════════════════════════
+function onFirebaseReady(){
+  db       = window._db;
+  hashPin  = window._hashPin;
+  firebase = window._firebase;
+  initApp();
+}
+
+if(window._firebaseReady){
+  onFirebaseReady();
+} else {
+  window.addEventListener('firebaseReady', onFirebaseReady);
+  // Timeout: if Firebase fails to load (no internet / wrong config)
+  setTimeout(()=>{
+    if(!db) {
+      document.getElementById('setup-notice').style.display='block';
+      document.getElementById('login-card').style.opacity='0.4';
+      document.getElementById('login-card').style.pointerEvents='none';
+    }
+  }, 5000);
+}
+
+async function initApp(){
+  // Ensure admin config doc exists with default PIN
+  try {
+    const cfgRef = firebase.doc(db,'config','admin');
+    const cfgSnap = await firebase.getDoc(cfgRef);
+    if(!cfgSnap.exists()){
+      // First run: create default admin config
+      const defaultHash = await hashPin('2568');
+      await firebase.setDoc(cfgRef,{
+        adminPinHash: defaultHash,
+        apiKey: '',
+        createdAt: firebase.serverTimestamp()
+      });
+    }
+  } catch(e){
+    console.error('Firebase init error:', e);
+    document.getElementById('setup-notice').style.display='block';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  PIN INPUT
+// ════════════════════════════════════════════════════════════════
+function pinPress(d){
+  if(pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  updateDots();
+  if(pinBuffer.length === 4) setTimeout(checkPin, 150);
+}
+function pinDelete(){
+  pinBuffer = pinBuffer.slice(0,-1);
+  updateDots();
+}
+function pinClear(){
+  pinBuffer = '';
+  updateDots();
+  document.getElementById('pin-error').textContent = '';
+}
+function updateDots(){
+  for(let i=0;i<4;i++){
+    const dot = document.getElementById('pd'+i);
+    dot.classList.toggle('filled', i < pinBuffer.length);
+    dot.classList.remove('error');
+  }
+}
+function pinErrorAnim(){
+  for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.add('error');
+  setTimeout(()=>{ pinBuffer=''; updateDots(); },600);
+}
+
+async function checkPin(){
+  if(!db){ toast('⚠️ Firebase no conectado'); pinBuffer=''; updateDots(); return; }
+  const entered = pinBuffer;
+  const enteredHash = await hashPin(entered);
+
+  try {
+    // Check admin PIN first
+    const cfgSnap = await firebase.getDoc(firebase.doc(db,'config','admin'));
+    if(cfgSnap.exists() && cfgSnap.data().adminPinHash === enteredHash){
+      currentUser = { isAdmin:true, nombre:'Administrador' };
+      enterAdmin();
+      return;
+    }
+
+    // Check student PINs
+    const usersSnap = await firebase.getDocs(firebase.collection(db,'users'));
+    let found = null;
+    usersSnap.forEach(d => {
+      if(d.data().pinHash === enteredHash) found = { id:d.id, ...d.data() };
+    });
+
+    if(!found){
+      document.getElementById('pin-error').textContent = '❌ PIN incorrecto';
+      pinErrorAnim();
+      return;
+    }
+    if(!found.habilitado){
+      document.getElementById('pin-error').textContent = '🔒 Acceso deshabilitado. Habla con el administrador.';
+      pinErrorAnim();
+      return;
+    }
+    currentUser = found;
+    enterAlumno();
+  } catch(e){
+    console.error(e);
+    document.getElementById('pin-error').textContent = '⚠️ Error de conexión: '+e.message;
+    pinErrorAnim();
+  }
+}
+
+// Keyboard support
+document.addEventListener('keydown', e => {
+  if(document.getElementById('s-login').classList.contains('active')){
+    if(e.key >= '0' && e.key <= '9') pinPress(e.key);
+    else if(e.key === 'Backspace') pinDelete();
+    else if(e.key === 'Escape') pinClear();
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ════════════════════════════════════════════════════════════════
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  el.classList.remove('active');
+  el.offsetHeight; // force reflow
+  el.classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function enterAlumno(){
+  // Personalize greeting
+  const initial = (currentUser.nombre||'?')[0].toUpperCase();
+  document.getElementById('alumno-avatar').textContent = initial;
+  document.getElementById('alumno-name').textContent = '¡Hola, ' + currentUser.nombre + '!';
+  const cursoStr = currentUser.curso ? ' · 📚 '+cursoLabel(currentUser.curso) : '';
+  document.getElementById('alumno-status').textContent = '● Conectado' + cursoStr +
+    ' · ' + (currentUser.puedeCrearTemas ? 'Puede crear temas' : 'Solo lectura');
+
+  // Show/hide CREAR based on permission
+  const mcCrear = document.getElementById('mc-crear');
+  if(!currentUser.puedeCrearTemas) mcCrear.classList.add('disabled');
+  else mcCrear.classList.remove('disabled');
+
+  pinBuffer = '';
+  document.getElementById('pin-error').textContent = '';
+  updateDots();
+  showScreen('s-alumno');
+}
+
+async function enterAdmin(){
+  pinBuffer = '';
+  document.getElementById('pin-error').textContent = '';
+  updateDots();
+  showScreen('s-admin');
+  await loadUserList();
+  await loadAdminApiKey();
+}
+
+function logout(){
+  currentUser = null;
+  pinBuffer = '';
+  updateDots();
+  document.getElementById('pin-error').textContent = '';
+  document.getElementById('pin-hint').textContent = 'Ingresa tu PIN de acceso';
+  showScreen('s-login');
+}
+
+function goBack(){
+  const curr=document.querySelector('.screen.active')?.id;
+  if(['s-crear','s-temas','s-juego','s-soon'].includes(curr)){
+    showScreen(currentUser?.isAdmin?'s-admin':'s-alumno');
+  } else if(currentUser?.isAdmin){ showScreen('s-admin'); }
+  else if(currentUser){ showScreen('s-alumno'); }
+  else { showScreen('s-login'); }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  FASE 2 — CREAR TEMA
+// ════════════════════════════════════════════════════════════════
+let chosenEmoji = '📖';
+let uploadedFiles = [];
+
+function irACrear(){
+  if(!currentUser?.puedeCrearTemas){ toast('⚠️ No tienes permiso para crear temas'); return; }
+  document.getElementById('tema-nombre').value = '';
+  chosenEmoji = '📖'; uploadedFiles = [];
+  document.getElementById('uz-status-crear').textContent = '';
+  document.getElementById('crear-step2-err').classList.remove('show');
+  document.querySelectorAll('.emoji-opt').forEach(e=>e.classList.remove('selected'));
+  document.querySelector('.emoji-opt').classList.add('selected');
+  setStep(1); showScreen('s-crear');
+}
+
+function pickEmoji(e,el){
+  chosenEmoji = e;
+  document.querySelectorAll('.emoji-opt').forEach(x=>x.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function setStep(n){
+  [1,2,3].forEach(i=>{
+    const d=document.getElementById('step'+i+'-dot');
+    d.classList.remove('active','done');
+    if(i<n) d.classList.add('done'); else if(i===n) d.classList.add('active');
+  });
+  document.getElementById('crear-step1').style.display=n===1?'block':'none';
+  document.getElementById('crear-step2').style.display=n===2?'block':'none';
+  document.getElementById('crear-step3').style.display=n===3?'block':'none';
+}
+
+function backToStep1(){ setStep(1); }
+
+function crearStep2(){
+  const nombre=document.getElementById('tema-nombre').value.trim();
+  if(!nombre){ toast('⚠️ Escribe el nombre del tema'); return; }
+  setStep(2);
+}
+
+function onFilesCrear(ev){
+  const all = Array.from(ev.target.files);
+  const st    = document.getElementById('uz-status-crear');
+  const errEl = document.getElementById('crear-step2-err');
+  const warnEl= document.getElementById('crear-step2-warn');
+  errEl.classList.remove('show');
+  warnEl.classList.remove('show');
+  st.textContent = '';
+
+  // ── Separate accepted from rejected formats ──────────────────
+  const accepted = all.filter(f=>{
+    const t=f.type.toLowerCase(), n=f.name.toLowerCase();
+    return t.startsWith('image/')||t==='application/pdf'||
+           n.endsWith('.pdf')||n.endsWith('.heic')||n.endsWith('.heif');
+  });
+  const rejected = all.filter(f=>!accepted.includes(f));
+
+  // ── No valid files at all ────────────────────────────────────
+  if(accepted.length===0){
+    if(all.length>0){
+      errEl.textContent='❌ Ningún archivo válido. Formatos admitidos: JPG, PNG, WEBP, HEIC, PDF.
+'+
+        'Archivos rechazados: '+all.map(f=>f.name).join(', ');
+      errEl.classList.add('show');
+    }
+    uploadedFiles=[]; return;
+  }
+
+  // ── Warn about rejected formats ──────────────────────────────
+  const warnings = [];
+  if(rejected.length>0){
+    warnings.push('⚠️ '+rejected.length+' archivo(s) ignorado(s) por formato no admitido: '+
+      rejected.map(f=>f.name).join(', '));
+  }
+
+  // ── Enforce MAX_FILES limit ──────────────────────────────────
+  uploadedFiles = accepted.slice(0, MAX_FILES);
+  if(accepted.length > MAX_FILES){
+    warnings.push('⚠️ Límite: máximo '+MAX_FILES+' archivos por tema. '+
+      'Se ignoraron los últimos '+(accepted.length-MAX_FILES)+': '+
+      accepted.slice(MAX_FILES).map(f=>f.name).join(', '));
+  }
+
+  // ── Calculate weight ─────────────────────────────────────────
+  const totalBytes = uploadedFiles.reduce((s,f)=>s+f.size, 0);
+  const totalMB    = (totalBytes/1024/1024).toFixed(1);
+  const pdfs  = uploadedFiles.filter(f=>f.name.toLowerCase().endsWith('.pdf')).length;
+  const heics = uploadedFiles.filter(f=>f.name.toLowerCase().endsWith('.heic')||
+                                        f.name.toLowerCase().endsWith('.heif')).length;
+  const imgs  = uploadedFiles.length - pdfs - heics;
+
+  // ── Weight warnings ──────────────────────────────────────────
+  if(parseFloat(totalMB)>200){
+    warnings.push('⚠️ El conjunto pesa '+totalMB+' MB. La compresión automática reducirá cada imagen '+
+      'a unos 50-100 KB, pero el proceso puede tardar más de lo habitual.');
+  }
+
+  // ── Build status text ────────────────────────────────────────
+  let parts = [];
+  if(imgs>0)  parts.push(imgs+' imagen'+(imgs>1?'es':''));
+  if(heics>0) parts.push(heics+' HEIC');
+  if(pdfs>0)  parts.push(pdfs+' PDF');
+  st.textContent = '✅ '+uploadedFiles.length+' archivo(s) listos: '+parts.join(' · ')+' · '+totalMB+' MB';
+
+  // ── Show warnings if any ─────────────────────────────────────
+  if(warnings.length>0){
+    warnEl.textContent = warnings.join('
+');
+    warnEl.classList.add('show');
+  }
+}
+
+async function crearStep3(){
+  const errEl=document.getElementById('crear-step2-err');
+  errEl.classList.remove('show');
+  if(!uploadedFiles.length){ errEl.textContent='⚠️ Sube al menos una imagen de tus apuntes'; errEl.classList.add('show'); return; }
+  let apiKey='';
+  try {
+    const cfgSnap=await firebase.getDoc(firebase.doc(db,'config','admin'));
+    const obf=cfgSnap.data()?.apiKey||'';
+    if(!obf){ errEl.textContent='⚠️ El administrador no ha configurado la clave API todavía'; errEl.classList.add('show'); return; }
+    apiKey=atob(obf).split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^(73+i%17))).join('');
+  } catch(e){ errEl.textContent='❌ Error obteniendo configuración: '+e.message; errEl.classList.add('show'); return; }
+  setStep(3);
+  await generarPreguntas(apiKey);
+}
+
+async function generarPreguntas(apiKey){
+  const nombre=document.getElementById('tema-nombre').value.trim();
+  setGStep(1,'active');
+  try {
+    // Compress images
+    const imgs=[]; const skipped=[]; const files=uploadedFiles.slice(0,MAX_FILES); let totalKB=0;
+    document.getElementById('gen-sub').textContent='Comprimiendo '+files.length+' archivo(s)…';
+    for(let fi=0;fi<files.length;fi++){
+      document.getElementById('gen-sub').textContent='📄 Procesando '+(fi+1)+'/'+files.length+': '+files[fi].name;
+      try {
+        const pages=await fileToImages(files[fi]);
+        for(const b64 of pages){
+          if(imgs.length>=50) break;
+          totalKB+=Math.round(b64.length*0.75/1024);
+          imgs.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}});
+        }
+      } catch(e){
+        console.warn('Skipping:',files[fi].name,e);
+        skipped.push(files[fi].name+' ('+e.message+')');
+      }
+    }
+    // Report any files that couldn't be processed
+    if(skipped.length>0){
+      const warnEl=document.getElementById('crear-step2-warn');
+      if(warnEl){
+        warnEl.textContent='⚠️ '+skipped.length+' archivo(s) no procesado(s):\n'+skipped.join('\n');
+        warnEl.classList.add('show');
+      }
+    }
+    if(!imgs.length) throw new Error(
+      'No se pudo procesar ningún archivo.\n'
+      +'Formatos admitidos: JPG, PNG, WEBP, HEIC (iPhone), PDF.\n'
+      +'Si usas HEIC, asegúrate de tener conexión a internet activa.'
+    );
+    setGStep(1,'done'); setGStep(2,'active');
+    const resumen = imgs.length+' páginas listas ('+totalKB+' KB)'+(skipped.length?' · '+skipped.length+' omitidos':'')+'.';
+    document.getElementById('gen-sub').textContent=resumen+' Enviando a la IA…';
+
+    // Call Anthropic API
+    const sys=`Eres un experto profesor del sistema educativo español (LOMLOE).
+Genera exactamente 100 preguntas tipo test de 4 opciones basadas en el contenido de las imágenes.
+REGLAS:
+- Devuelve SOLO un array JSON puro, sin markdown ni texto extra
+- 4 opciones por pregunta, una sola correcta
+- Lenguaje claro para adolescentes
+- Mezcla dificultades: 40% fácil, 40% media, 20% difícil
+- Cubre todos los temas de las imágenes
+- "correcta" es el índice 0-3 de la opción correcta
+FORMATO: [{"categoria":"Nombre","pregunta":"...","opciones":["A","B","C","D"],"correcta":0,"explicacion":"breve"}]`;
+
+    // Add 90-second timeout to the API call
+    const controller=new AbortController();
+    const timeoutId=setTimeout(()=>controller.abort(),90000);
+    let resp;
+    try{
+      resp=await fetch('https://api.anthropic.com/v1/messages',{
+        signal:controller.signal,
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,
+        'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-opus-4-20250514',max_tokens:8000,system:sys,
+        messages:[{role:'user',content:[...imgs,
+          {type:'text',text:'Analiza estas imágenes y genera exactamente 100 preguntas. Devuelve SOLO el array JSON.'}
+        ]}]})
+    });
+    } catch(fetchErr){
+      clearTimeout(timeoutId);
+      if(fetchErr.name==='AbortError') throw new Error('La IA tardó demasiado en responder (más de 90s). Prueba con menos imágenes.');
+      throw new Error('Error de red: '+fetchErr.message+'. Comprueba tu conexión a internet.');
+    }
+    clearTimeout(timeoutId);
+    if(!resp.ok){
+      let apiErrMsg='Error desconocido';
+      try{
+        const e=await resp.json(); const m=e.error?.message||'';
+        if(resp.status===401) apiErrMsg='🔑 Clave API incorrecta o expirada.\n→ Ve al Configurador y guarda una clave válida (sk-ant-api03-…).';
+        else if(resp.status===403) apiErrMsg='🔒 Sin permisos. La clave API no tiene acceso a este modelo.\n→ Comprueba que la clave es correcta en console.anthropic.com';
+        else if(resp.status===429) apiErrMsg='⏳ Demasiadas peticiones seguidas.\n→ Espera 1-2 minutos e inténtalo de nuevo.';
+        else if(resp.status===400 && m.includes('too large')) apiErrMsg='📦 Las imágenes pesan demasiado incluso comprimidas.\n→ Prueba con menos archivos (10 o menos) o imágenes más pequeñas.';
+        else if(resp.status===400) apiErrMsg='❌ Petición incorrecta: '+m;
+        else if(resp.status===500) apiErrMsg='🔧 Error interno del servidor de Anthropic.\n→ Inténtalo de nuevo en unos minutos.';
+        else if(resp.status===529) apiErrMsg='🌐 El servidor de la IA está saturado ahora mismo.\n→ Espera unos minutos e inténtalo de nuevo.';
+        else apiErrMsg='Error '+resp.status+': '+m;
+      }catch(_){ apiErrMsg='Error '+resp.status+' (respuesta no válida del servidor)'; }
+      throw new Error(apiErrMsg);
+    }
+    setGStep(2,'done'); setGStep(3,'active');
+    document.getElementById('gen-sub').textContent='Procesando respuesta de la IA…';
+
+    const data=await resp.json();
+    let raw=data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
+    let preguntas;
+    try { preguntas=JSON.parse(raw); }
+    catch(_){
+      const m=raw.match(/\[[\s\S]*\]/);
+      if(m) preguntas=JSON.parse(m[0]);
+      else throw new Error(
+      'La IA no devolvió las preguntas en el formato esperado.\n'
+      +'→ Inténtalo de nuevo. Si el error persiste, prueba con menos imágenes o más claras.'
+    );
+    }
+    if(!Array.isArray(preguntas)||preguntas.length<10) throw new Error(
+      'La IA generó muy pocas preguntas ('+( Array.isArray(preguntas)?preguntas.length:0)+').\n'
+      +'→ Asegúrate de que las imágenes son legibles y contienen texto suficiente.\n'
+      +'→ Evita fotos borrosas, con poca luz o muy inclinadas.'
+    );
+    while(preguntas.length<100) preguntas.push(preguntas[Math.floor(Math.random()*preguntas.length)]);
+    preguntas=preguntas.slice(0,100);
+
+    // Save to Firebase with unique sequential name
+    setGStep(3,'done'); setGStep(4,'active');
+    document.getElementById('gen-sub').textContent='Guardando en tu biblioteca…';
+    const nombreFinal=await buildUniqueTemaName(nombre);
+    await firebase.addDoc(firebase.collection(db,'temas'),{
+      userId:currentUser.id, nombre:nombreFinal, emoji:chosenEmoji,
+      preguntas:preguntas, totalPregs:preguntas.length,
+      createdAt:firebase.serverTimestamp()
+    });
+    setGStep(4,'done');
+    document.getElementById('gen-title').textContent='¡TEMA CREADO! 🎉';
+    document.getElementById('gen-sub').textContent=nombreFinal+' · '+preguntas.length+' preguntas listas';
+    await sleep(2000);
+    toast('✅ '+nombreFinal+' guardado correctamente');
+    showScreen('s-alumno');
+  } catch(err){
+    setStep(2);
+    document.getElementById('crear-step2-err').textContent='❌ '+err.message;
+    document.getElementById('crear-step2-err').classList.add('show');
+  }
+}
+
+async function buildUniqueTemaName(nombre){
+  const snap=await firebase.getDocs(
+    firebase.query(firebase.collection(db,'temas'),firebase.where('userId','==',currentUser.id))
+  );
+  const existing=new Set();
+  snap.forEach(d=>existing.add(d.data().nombre));
+  if(!existing.has(nombre)) return nombre;
+  let n=2; while(existing.has(nombre+' #'+n)) n++;
+  return nombre+' #'+n;
+}
+
+function setGStep(n,s){
+  const el=document.getElementById('gstep-'+n);
+  if(!el) return;
+  el.classList.remove('active','done'); el.classList.add(s);
+}
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// ── IMAGE PIPELINE ──────────────────────────────────────────────
+// JPG/PNG/WEBP: always · HEIC: heic2any CDN · PDF: pdf.js if available
+const MAX_FILES=25, MAX_SLOTS=50;
+
+function canvasToB64(s,maxPx=800,q=0.65){
+  let w=s.width||s.naturalWidth||800,h=s.height||s.naturalHeight||600;
+  if(w>maxPx||h>maxPx){if(w>=h){h=Math.round(h*(maxPx/w));w=maxPx}else{w=Math.round(w*(maxPx/h));h=maxPx}}
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  cv.getContext('2d').drawImage(s,0,0,w,h);
+  return cv.toDataURL('image/jpeg',q).split(',')[1];
+}
+function blobToB64(blob){
+  return new Promise((res,rej)=>{
+    if(typeof createImageBitmap==='function'){
+      createImageBitmap(blob).then(bm=>{try{res(canvasToB64(bm))}finally{bm.close&&bm.close()}}).catch(()=>readerFallback(blob,res,rej));
+    } else { readerFallback(blob,res,rej); }
+  });
+}
+function readerFallback(blob,res,rej){
+  const r=new FileReader();
+  r.onerror=()=>rej(new Error('No se pudo leer: '+(blob.name||'archivo')));
+  r.onload=ev=>{const img=new Image();img.onerror=()=>rej(new Error('Imagen no decodificable'));img.onload=()=>res(canvasToB64(img));img.src=ev.target.result;};
+  r.readAsDataURL(blob);
+}
+async function fileToImages(file){
+  const name=file.name.toLowerCase(),mime=(file.type||'').toLowerCase();
+  // ── PDF ──────────────────────────────────────────────────────
+  if(name.endsWith('.pdf')||mime==='application/pdf'){
+    if(typeof pdfjsLib!=='undefined'){
+      try{
+        const buf=await file.arrayBuffer(),pdf=await pdfjsLib.getDocument({data:buf}).promise,pages=[];
+        for(let p=1;p<=Math.min(pdf.numPages,25);p++){
+          const pg=await pdf.getPage(p),vp=pg.getViewport({scale:1.5});
+          const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
+          await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+          pages.push(canvasToB64(cv));
+        }
+        return pages;
+      }catch(e){console.warn('pdf.js:',e);}
+    }
+    try{return[await blobToB64(file)];}
+    catch(_){throw new Error('PDF "'+file.name+'" no procesable. Convierte las páginas a JPG.');}
+  }
+  // ── HEIC/HEIF (iPhone) ───────────────────────────────────────
+  if(name.endsWith('.heic')||name.endsWith('.heif')||mime==='image/heic'||mime==='image/heif'){
+    // Strategy 1: native browser (Safari 17+, Chrome 105+)
+    try{const bm=await createImageBitmap(file);const b64=canvasToB64(bm);bm.close&&bm.close();return[b64];}catch(_){}
+    // Strategy 2: heic2any library via CDN (requires https://)
+    if(typeof heic2any!=='undefined'){
+      try{
+        const result=await heic2any({blob:file,toType:'image/jpeg',quality:0.88});
+        const jpegBlob=Array.isArray(result)?result[0]:result;
+        return[await blobToB64(jpegBlob)];
+      }catch(e){throw new Error('HEIC "'+file.name+'" no convertible: '+e.message);}
+    }
+    throw new Error('HEIC no soportado aquí. Solución: iPhone → Ajustes → Cámara → Formatos → Máxima Compatibilidad (fotos en JPG).');
+  }
+  // ── JPG / PNG / WEBP ─────────────────────────────────────────
+  try{return[await blobToB64(file)];}
+  catch(e){throw new Error('No se pudo leer "'+file.name+'": '+e.message);}
+}
+
+// ════════════════════════════════════════════════════════════════
+//  FASE 2 — ABRIR / BORRAR TEMA
+// ════════════════════════════════════════════════════════════════
+let temasModo = 'abrir';
+
+function irAAbrir(){ cargarTemas('abrir'); }
+function irABorrar(){ cargarTemas('borrar'); }
+
+async function cargarTemas(modo){
+  temasModo=modo;
+  document.getElementById('temas-screen-title').textContent = modo==='abrir'?'🎮 ABRIR TEMA':'🗑️ BORRAR TEMA';
+  showScreen('s-temas');
+  const list=document.getElementById('temas-list');
+  list.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)"><div class="spinner"></div>Cargando temas…</div>';
+  try {
+    const snap=await firebase.getDocs(
+      firebase.query(firebase.collection(db,'temas'),firebase.where('userId','==',currentUser.id))
+    );
+    if(snap.empty){
+      list.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);font-weight:700">No tienes temas guardados todavía.<br>Pulsa ✨ <strong>Crear Tema</strong> para empezar.</div>';
+      return;
+    }
+    const temas=[];
+    snap.forEach(d=>temas.push({id:d.id,...d.data()}));
+    temas.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+    list.innerHTML='';
+    temas.forEach(t=>list.appendChild(buildTemaItem(t,modo)));
+  } catch(e){
+    list.innerHTML='<div style="color:var(--red);font-weight:700;padding:12px">Error: '+e.message+'</div>';
+  }
+}
+
+function buildTemaItem(t,modo){
+  const div=document.createElement('div'); div.className='tema-item';
+  const fecha=t.createdAt?.toDate?t.createdAt.toDate().toLocaleDateString('es-ES'):'';
+  div.innerHTML=
+    '<div class="tema-emoji">'+( t.emoji||'📖')+'</div>'+
+    '<div class="tema-info">'+
+      '<div class="tema-nombre">'+esc(t.nombre)+'</div>'+
+      '<div class="tema-meta">'+(t.totalPregs||0)+' preguntas · '+fecha+'</div>'+
+    '</div>'+
+    '<div class="tema-actions">'+
+      (modo==='abrir'
+        ? '<button class="btn btn-gold btn-sm" onclick="abrirJuego(\''+t.id+'\',\''+esc(t.nombre)+'\','+( t.totalPregs||0)+',\''+( t.emoji||'📖')+'\')">▶ Jugar</button>'
+        : '<button class="btn btn-red btn-sm" onclick="confirmarBorrarTema(\''+t.id+'\',\''+esc(t.nombre)+'\')">🗑️ Borrar</button>'
+      )+
+    '</div>';
+  return div;
+}
+
+function abrirJuego(temaId,nombre,total,emoji){
+  document.getElementById('juego-tema-label').textContent=emoji+' '+nombre;
+  document.getElementById('juego-preg-count').textContent=total+' preguntas generadas y listas';
+  showScreen('s-juego');
+}
+
+function confirmarBorrarTema(temaId,nombre){
+  document.getElementById('confirm-msg').textContent='Se eliminará el tema "'+nombre+'" y todas sus preguntas. Esta acción no se puede deshacer.';
+  document.getElementById('confirm-ok-btn').onclick=async()=>{
+    closeModal('modal-confirm');
+    try{
+      await firebase.deleteDoc(firebase.doc(db,'temas',temaId));
+      toast('🗑️ Tema eliminado');
+      await cargarTemas(temasModo);
+    }catch(e){toast('❌ Error: '+e.message);}
+  };
+  openModal('modal-confirm');
+}
+
+function irAHistorial(){
+  showSoon('🏆','Mis Récords','Tu historial de partidas, puntuaciones y rachas. ¡Disponible en la Fase 3!');
+}
+function showSoon(icon,title,desc){
+  document.getElementById('soon-icon').textContent=icon;
+  document.getElementById('soon-title').textContent=title;
+  document.getElementById('soon-desc').textContent=desc;
+  showScreen('s-soon');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ADMIN — USER LIST
+// ════════════════════════════════════════════════════════════════
+async function loadUserList(){
+  const list = document.getElementById('user-list');
+  list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted)"><div class="spinner"></div></div>';
+  try {
+    const snap = await firebase.getDocs(firebase.collection(db,'users'));
+    if(snap.empty){
+      list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-weight:700">No hay alumnos todavía.<br>Pulsa "+ Nuevo alumno" para añadir el primero.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    snap.forEach(d => {
+      const u = { id:d.id, ...d.data() };
+      list.appendChild(buildUserItem(u));
+    });
+  } catch(e){
+    list.innerHTML = '<div style="color:var(--red);font-weight:700;padding:12px">Error cargando alumnos: '+e.message+'</div>';
+  }
+}
+
+function buildUserItem(u){
+  const div = document.createElement('div');
+  div.className = 'user-item' + (u.habilitado?'':' disabled-user');
+  div.id = 'user-row-'+u.id;
+  const initial = (u.nombre||'?')[0].toUpperCase();
+  div.innerHTML = `
+    <div class="user-avatar">${initial}</div>
+    <div class="user-info">
+      <div class="user-name">${esc(u.nombre)}</div>
+      <div class="user-meta">
+        <span class="badge ${u.habilitado?'badge-green':'badge-red'}">${u.habilitado?'Activo':'Inactivo'}</span>
+        ${u.puedeCrearTemas?'<span class="badge badge-blue" style="margin-left:4px">Crea temas</span>':''}
+        ${u.curso?'<span class="badge" style="margin-left:4px;background:rgba(255,215,0,.12);color:var(--gold);border:1px solid rgba(255,215,0,.25)">📚 '+cursoLabel(u.curso)+'</span>':''}
+      </div>
+    </div>
+    <div class="user-actions">
+      <div class="icon-btn" title="Editar" onclick="openModalEditarAlumno(${JSON.stringify(u).replace(/"/g,'&quot;')})">✏️</div>
+      <div class="icon-btn" title="Habilitar/Deshabilitar" onclick="toggleUserHabilitado('${u.id}',${!u.habilitado})">${u.habilitado?'🔒':'🔓'}</div>
+      <div class="icon-btn" title="Eliminar" onclick="confirmDeleteUser('${u.id}','${esc(u.nombre)}')">🗑️</div>
+    </div>`;
+  return div;
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function cursoLabel(c){
+  const map={
+    P1:'1º Prim',P2:'2º Prim',P3:'3º Prim',P4:'4º Prim',P5:'5º Prim',P6:'6º Prim',
+    E1:'1º ESO',E2:'2º ESO',E3:'3º ESO',E4:'4º ESO',
+    B1:'1º Bach',B2:'2º Bach'
+  };
+  return map[c]||c;
+}
+
+async function toggleUserHabilitado(userId, newState){
+  try {
+    await firebase.updateDoc(firebase.doc(db,'users',userId),{ habilitado: newState });
+    toast(newState ? '🔓 Alumno habilitado' : '🔒 Alumno deshabilitado');
+    await loadUserList();
+  } catch(e){ toast('❌ Error: '+e.message); }
+}
+
+function confirmDeleteUser(userId, nombre){
+  document.getElementById('confirm-msg').textContent = 'Se eliminará al alumno "'+nombre+'" y todos sus datos. Esta acción no se puede deshacer.';
+  document.getElementById('confirm-ok-btn').onclick = async () => {
+    closeModal('modal-confirm');
+    try {
+      await firebase.deleteDoc(firebase.doc(db,'users',userId));
+      toast('🗑️ Alumno eliminado');
+      await loadUserList();
+    } catch(e){ toast('❌ Error: '+e.message); }
+  };
+  openModal('modal-confirm');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ADMIN — MODAL NUEVO / EDITAR ALUMNO
+// ════════════════════════════════════════════════════════════════
+function openModalNuevoAlumno(){
+  document.getElementById('modal-alumno-title').textContent = '➕ Nuevo Alumno';
+  document.getElementById('edit-user-id').value = '';
+  document.getElementById('form-nombre').value = '';
+  document.getElementById('form-pin').value = '';
+  document.getElementById('form-curso').value = '';
+  permsBuffer = { habilitado:true, crearTemas:true };
+  updateToggles();
+  document.getElementById('modal-alumno-err').classList.remove('show');
+  openModal('modal-alumno');
+}
+
+function openModalEditarAlumno(u){
+  document.getElementById('modal-alumno-title').textContent = '✏️ Editar Alumno';
+  document.getElementById('edit-user-id').value = u.id;
+  document.getElementById('form-nombre').value = u.nombre||'';
+  document.getElementById('form-pin').value = '';  // blank = keep current
+  document.getElementById('form-curso').value = u.curso||'';
+  permsBuffer = { habilitado: !!u.habilitado, crearTemas: !!u.puedeCrearTemas };
+  updateToggles();
+  document.getElementById('modal-alumno-err').classList.remove('show');
+  openModal('modal-alumno');
+}
+
+function togglePerm(key){
+  permsBuffer[key] = !permsBuffer[key];
+  updateToggles();
+}
+function updateToggles(){
+  document.getElementById('t-habilitado').classList.toggle('on', permsBuffer.habilitado);
+  document.getElementById('t-crearTemas').classList.toggle('on', permsBuffer.crearTemas);
+}
+
+async function saveAlumno(){
+  const nombre = document.getElementById('form-nombre').value.trim();
+  const pin    = document.getElementById('form-pin').value.trim();
+  const userId = document.getElementById('edit-user-id').value;
+  const errEl  = document.getElementById('modal-alumno-err');
+  errEl.classList.remove('show');
+
+  if(!nombre){ errEl.textContent='⚠️ Introduce el nombre del alumno'; errEl.classList.add('show'); return; }
+
+  const isNew = !userId;
+  if(isNew && (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin))){
+    errEl.textContent='⚠️ El PIN debe tener exactamente 4 dígitos'; errEl.classList.add('show'); return;
+  }
+  if(pin && (pin.length !== 4 || !/^\d{4}$/.test(pin))){
+    errEl.textContent='⚠️ El PIN debe tener exactamente 4 dígitos'; errEl.classList.add('show'); return;
+  }
+
+  try {
+    const curso = document.getElementById('form-curso').value;
+    const data = {
+      nombre,
+      curso:           curso || '',
+      habilitado:      permsBuffer.habilitado,
+      puedeCrearTemas: permsBuffer.crearTemas,
+      updatedAt:       firebase.serverTimestamp()
+    };
+    if(pin) data.pinHash = await hashPin(pin);
+
+    if(isNew){
+      // Check PIN not already taken
+      const snap = await firebase.getDocs(firebase.collection(db,'users'));
+      const pinHash = await hashPin(pin);
+      let taken = false;
+      snap.forEach(d => { if(d.data().pinHash === pinHash) taken = true; });
+      if(taken){ errEl.textContent='⚠️ Ese PIN ya está en uso por otro alumno'; errEl.classList.add('show'); return; }
+      data.pinHash     = pinHash;
+      data.createdAt   = firebase.serverTimestamp();
+      await firebase.addDoc(firebase.collection(db,'users'), data);
+      toast('✅ Alumno creado: '+nombre);
+    } else {
+      await firebase.updateDoc(firebase.doc(db,'users',userId), data);
+      toast('✅ Alumno actualizado: '+nombre);
+    }
+    closeModal('modal-alumno');
+    await loadUserList();
+  } catch(e){
+    errEl.textContent='❌ Error: '+e.message; errEl.classList.add('show');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ADMIN — API KEY & PIN CHANGES
+// ════════════════════════════════════════════════════════════════
+function toggleApiInfo(){
+  const box = document.getElementById('api-info-box');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadAdminApiKey(){
+  try {
+    const snap = await firebase.getDoc(firebase.doc(db,'config','admin'));
+    if(snap.exists() && snap.data().apiKey){
+      document.getElementById('admin-apikey').placeholder = '••• clave guardada (editar para cambiar) •••';
+    }
+  } catch(e){}
+}
+
+async function saveApiKey(){
+  const key = document.getElementById('admin-apikey').value.trim();
+  const okEl  = document.getElementById('admin-config-msg');
+  const errEl = document.getElementById('admin-config-err');
+  okEl.classList.remove('show'); errEl.classList.remove('show');
+
+  if(!key){ errEl.textContent='⚠️ Introduce la clave API'; errEl.classList.add('show'); return; }
+  if(!key.startsWith('sk-ant-')){ errEl.textContent='⚠️ La clave debe empezar por sk-ant-'; errEl.classList.add('show'); return; }
+
+  try {
+    // Simple XOR obfuscation (not real encryption, but hides from casual view)
+    const obf = btoa(key.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^(73+i%17))).join(''));
+    await firebase.updateDoc(firebase.doc(db,'config','admin'),{ apiKey: obf });
+    document.getElementById('admin-apikey').value = '';
+    document.getElementById('admin-apikey').placeholder = '••• clave guardada (editar para cambiar) •••';
+    okEl.textContent = '✅ Clave API guardada correctamente';
+    okEl.classList.add('show');
+    setTimeout(()=>okEl.classList.remove('show'),3000);
+  } catch(e){
+    errEl.textContent='❌ Error: '+e.message; errEl.classList.add('show');
+  }
+}
+
+async function changeAdminPin(){
+  const actual = document.getElementById('admin-pin-actual').value.trim();
+  const nuevo  = document.getElementById('admin-pin-nuevo').value.trim();
+  const okEl   = document.getElementById('admin-config-msg');
+  const errEl  = document.getElementById('admin-config-err');
+  okEl.classList.remove('show'); errEl.classList.remove('show');
+
+  if(!actual||!nuevo){ errEl.textContent='⚠️ Rellena ambos campos'; errEl.classList.add('show'); return; }
+  if(!/^\d{4}$/.test(nuevo)){ errEl.textContent='⚠️ El PIN nuevo debe tener 4 dígitos'; errEl.classList.add('show'); return; }
+
+  try {
+    const snap = await firebase.getDoc(firebase.doc(db,'config','admin'));
+    const actualHash = await hashPin(actual);
+    if(snap.data().adminPinHash !== actualHash){
+      errEl.textContent='❌ El PIN actual es incorrecto'; errEl.classList.add('show'); return;
+    }
+    const nuevoHash = await hashPin(nuevo);
+    await firebase.updateDoc(firebase.doc(db,'config','admin'),{ adminPinHash: nuevoHash });
+    document.getElementById('admin-pin-actual').value='';
+    document.getElementById('admin-pin-nuevo').value='';
+    okEl.textContent='✅ PIN de administrador cambiado correctamente';
+    okEl.classList.add('show');
+    setTimeout(()=>okEl.classList.remove('show'),3000);
+  } catch(e){
+    errEl.textContent='❌ Error: '+e.message; errEl.classList.add('show');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  MODALS
+// ════════════════════════════════════════════════════════════════
+function openModal(id){ document.getElementById(id).style.display='flex'; }
+function closeModal(id){ document.getElementById(id).style.display='none'; }
+function closeModalIfBg(e,id){ if(e.target.id===id) closeModal(id); }
+
+// ════════════════════════════════════════════════════════════════
+//  TOAST
+// ════════════════════════════════════════════════════════════════
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+</script>
+</body>
+</html>
